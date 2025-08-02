@@ -38,8 +38,9 @@ async fn ping<R: Runtime>(app: tauri::AppHandle<R>, payload: PingRequest) -> Res
 /**
  * 打印 HTML 内容
  */
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 async fn print_html<R: Runtime>(app: tauri::AppHandle<R>, options: PrintHtmlOptions) -> Result<String> {
+    println!("print_html: {:?}", options.print_settings);
     app.printer().print_html(options)
 }
 

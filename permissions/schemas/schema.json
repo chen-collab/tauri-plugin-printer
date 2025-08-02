@@ -403,6 +403,18 @@
           "markdownDescription": "Denies the ping command without any pre-configured scope."
         },
         {
+          "description": "Enables the print_html command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-print-html",
+          "markdownDescription": "Enables the print_html command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the print_html command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-print-html",
+          "markdownDescription": "Denies the print_html command without any pre-configured scope."
+        },
+        {
           "description": "Enables the print_pdf command without any pre-configured scope.",
           "type": "string",
           "const": "allow-print-pdf",

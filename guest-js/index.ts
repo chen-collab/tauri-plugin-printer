@@ -57,16 +57,8 @@ export interface PrintHtmlOptions {
 }
 
 export async function printHtml(options: PrintHtmlOptions): Promise<string> {
+  console.log('打印配置html:', options);
   return await invoke<string>('plugin:printer|print_html', {
-    html: options.html,
-    printer_id: options.printer_id,
-    print_settings: options.print_settings,
-    remove_after_print: options.remove_after_print,
-    page_size: options.page_size,
-    orientation: options.orientation,
-    margin: options.margin,
-    quality: options.quality,
-    grayscale: options.grayscale,
-    copies: options.copies,
+    options: options
   });
 }

@@ -11,6 +11,7 @@
     "printer:allow-get-printers",
     "printer:allow-get-printers-by-name",
     "printer:allow-print-pdf",
+    "printer:allow-print-html",
     "printer:allow-custom-get-printers-by-name",
     "printer:allow-custom-print-pdf",
     "printer:allow-get-jobs",

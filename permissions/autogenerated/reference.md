@@ -262,6 +262,32 @@ Denies the ping command without any pre-configured scope.
 <tr>
 <td>
 
+`printer:allow-print-html`
+
+</td>
+<td>
+
+Enables the print_html command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`printer:deny-print-html`
+
+</td>
+<td>
+
+Denies the print_html command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `printer:allow-print-pdf`
 
 </td>
