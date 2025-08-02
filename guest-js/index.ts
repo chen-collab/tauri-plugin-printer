@@ -17,3 +17,19 @@ export async function getPrinterByName(printerName: string): Promise<string> {
     printername: printerName,
   });
 }
+
+export interface PrintPdfOptions {
+  id: string;
+  path: string;
+  printer_setting: string;
+  remove_after_print: boolean;
+}
+
+export async function printPdf(options: PrintPdfOptions): Promise<string> {
+  return await invoke<string>('plugin:printer|print_pdf', {
+    id: options.id,
+    path: options.path,
+    printerSetting: options.printer_setting,
+    removeAfterPrint: options.remove_after_print,
+  });
+}

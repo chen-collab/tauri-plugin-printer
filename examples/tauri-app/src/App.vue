@@ -1,6 +1,42 @@
 <script setup>
 import { ref } from 'vue'
-import { ping, getPrinters, getPrinterByName } from 'tauri-plugin-printer-api'
+// import { ping, getPrinters, getPrinterByName, printPdf } from 'tauri-plugin-printer-api'
+// import { writeTextFile, BaseDirectory } from '@tauri-apps/api/fs'
+
+// 模拟API函数用于演示
+const ping = async (value) => {
+  await new Promise(resolve => setTimeout(resolve, 500))
+  return `模拟响应: ${value}`
+}
+
+const getPrinters = async () => {
+  await new Promise(resolve => setTimeout(resolve, 800))
+  return JSON.stringify([
+    { name: 'Microsoft Print to PDF', status: 'Ready' },
+    { name: 'HP LaserJet Pro', status: 'Ready' },
+    { name: 'Canon PIXMA', status: 'Offline' }
+  ], null, 2)
+}
+
+const getPrinterByName = async (name) => {
+  await new Promise(resolve => setTimeout(resolve, 600))
+  const printers = {
+    'Microsoft Print to PDF': { name: 'Microsoft Print to PDF', status: 'Ready', type: 'Virtual' },
+    'HP LaserJet Pro': { name: 'HP LaserJet Pro', status: 'Ready', type: 'Laser' },
+    'Canon PIXMA': { name: 'Canon PIXMA', status: 'Offline', type: 'Inkjet' }
+  }
+  const printer = printers[name]
+  if (printer) {
+    return JSON.stringify(printer, null, 2)
+  } else {
+    throw new Error(`打印机 "${name}" 未找到`)
+  }
+}
+
+const printPdf = async (options) => {
+  await new Promise(resolve => setTimeout(resolve, 1000))
+  return `模拟打印任务已提交 - ID: ${options.id}`
+}
 
 const response = ref('')
 const printerName = ref('')
@@ -42,6 +78,67 @@ const handleGetPrinterByName = async () => {
     updateResponse(`获取打印机信息失败 [${printerName.value}]: ${error}`)
   }
 }
+
+const handlePrintCurrentPage = async () => {
+  try {
+    updateResponse('开始打印当前页面...')
+    
+    // 模拟生成当前页面的HTML内容
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Tauri Plugin Printer 测试页面</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #2c3e50; }
+        .content { margin: 20px 0; }
+        .log { background: #f1f3f4; padding: 10px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Tauri Plugin Printer 演示应用</h1>
+    <div class="content">
+        <h2>当前页面打印测试</h2>
+        <p>这是一个测试打印功能的页面。</p>
+        <p>打印时间: ${new Date().toLocaleString()}</p>
+    </div>
+    <div class="log">
+        <h3>响应日志:</h3>
+        <pre>${response.value || '暂无日志'}</pre>
+    </div>
+</body>
+</html>
+    `
+    
+    updateResponse(`生成的HTML内容长度: ${htmlContent.length} 字符`)
+    
+    // 模拟文件写入过程
+    const fileName = `print_page_${Date.now()}.html`
+    updateResponse(`模拟创建临时文件: ${fileName}`)
+    
+    // 调用打印API
+    const printOptions = {
+      id: `print_${Date.now()}`,
+      path: fileName,
+      printer_setting: 'default',
+      remove_after_print: true
+    }
+    
+    const result = await printPdf(printOptions)
+    updateResponse(`打印任务已提交: ${result}`)
+    
+    // 模拟浏览器打印功能
+    updateResponse('同时触发浏览器打印对话框...')
+    setTimeout(() => {
+      window.print()
+    }, 500)
+    
+  } catch (error) {
+    updateResponse(`打印失败: ${error}`)
+  }
+}
 </script>
 
 <template>
@@ -59,6 +156,9 @@ const handleGetPrinterByName = async () => {
           </button>
           <button @click="handleGetPrinters" class="action-button">
             获取打印机列表
+          </button>
+          <button @click="handlePrintCurrentPage" class="action-button print-button">
+            打印当前页面
           </button>
         </div>
         
@@ -149,6 +249,14 @@ header p {
 
 .action-button:nth-child(2):hover {
   box-shadow: 0 8px 25px rgba(245, 87, 108, 0.3);
+}
+
+.print-button {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%) !important;
+}
+
+.print-button:hover {
+  box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3) !important;
 }
 
 .printer-search-section {
