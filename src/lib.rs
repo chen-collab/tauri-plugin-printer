@@ -136,7 +136,10 @@ fn print_pdf(
     printer_setting: String,
     remove_after_print: bool,
 ) -> String {
-    
+    println!("打印PDF: {:?}", id);
+    println!("打印PDF: {:?}", path);
+    println!("打印PDF: {:?}", printer_setting);
+    println!("打印PDF: {:?}", remove_after_print);
     if cfg!(windows) {
         let options = declare::PrintOptions { 
             id,
