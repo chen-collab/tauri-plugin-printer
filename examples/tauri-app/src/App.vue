@@ -1,45 +1,14 @@
 <script setup>
 import { ref } from 'vue'
-// import { ping, getPrinters, getPrinterByName, printPdf } from 'tauri-plugin-printer-api'
+import { ping, getPrinters, getPrinterByName, printPdf } from 'tauri-plugin-printer-api'
 // import { writeTextFile, BaseDirectory } from '@tauri-apps/api/fs'
 
-// 模拟API函数用于演示
-const ping = async (value) => {
-  await new Promise(resolve => setTimeout(resolve, 500))
-  return `模拟响应: ${value}`
-}
+ 
 
-const getPrinters = async () => {
-  await new Promise(resolve => setTimeout(resolve, 800))
-  return JSON.stringify([
-    { name: 'Microsoft Print to PDF', status: 'Ready' },
-    { name: 'HP LaserJet Pro', status: 'Ready' },
-    { name: 'Canon PIXMA', status: 'Offline' }
-  ], null, 2)
-}
-
-const getPrinterByName = async (name) => {
-  await new Promise(resolve => setTimeout(resolve, 600))
-  const printers = {
-    'Microsoft Print to PDF': { name: 'Microsoft Print to PDF', status: 'Ready', type: 'Virtual' },
-    'HP LaserJet Pro': { name: 'HP LaserJet Pro', status: 'Ready', type: 'Laser' },
-    'Canon PIXMA': { name: 'Canon PIXMA', status: 'Offline', type: 'Inkjet' }
-  }
-  const printer = printers[name]
-  if (printer) {
-    return JSON.stringify(printer, null, 2)
-  } else {
-    throw new Error(`打印机 "${name}" 未找到`)
-  }
-}
-
-const printPdf = async (options) => {
-  await new Promise(resolve => setTimeout(resolve, 1000))
-  return `模拟打印任务已提交 - ID: ${options.id}`
-}
 
 const response = ref('')
 const printerName = ref('')
+const pdfFilePath = ref('D:\\Downloads\\平心堂项目报价.pdf')
 
 const updateResponse = (returnValue) => {
   const timestamp = new Date().toLocaleTimeString()
@@ -119,14 +88,13 @@ const handlePrintCurrentPage = async () => {
     updateResponse(`模拟创建临时文件: ${fileName}`)
     
     // 调用打印API
+    const printId = `print_${Date.now()}`
     const printOptions = {
-      id: `print_${Date.now()}`,
-      path: fileName,
-      printer_setting: 'default',
+      printer_setting: 'Wondershare PDFelement',
       remove_after_print: true
     }
     
-    const result = await printPdf(printOptions)
+    const result = await printPdf(printId, fileName, printOptions)
     updateResponse(`打印任务已提交: ${result}`)
     
     // 模拟浏览器打印功能
@@ -137,6 +105,37 @@ const handlePrintCurrentPage = async () => {
     
   } catch (error) {
     updateResponse(`打印失败: ${error}`)
+  }
+}
+
+const handlePrintSpecificPdf = async () => {
+  try {
+    updateResponse(`开始打印指定PDF文件: ${pdfFilePath.value}`)
+    
+    // 检查是否设置了打印机
+    if (!printerName.value.trim()) {
+      updateResponse('警告: 未指定打印机，将使用默认打印机')
+    }
+    
+    // 构建打印选项
+    const printId = `pdf_print_${Date.now()}`
+    const printOptions = {
+      id: printId, path: pdfFilePath.value, 
+      printer_setting: printerName.value.trim() || 'default',
+      remove_after_print: false // 不删除原文件
+    }
+    
+    updateResponse(`打印配置: ID=${printId}, Path=${pdfFilePath.value}, Options=${JSON.stringify(printOptions, null, 2)}`)
+    
+    // 调用打印PDF API
+    console.log('打印配置:', { id: printId, path: pdfFilePath.value, options: printOptions });
+    const result = await printPdf( printOptions)
+    updateResponse(`PDF打印任务已提交: ${result}`)
+    updateResponse(`文件路径: ${printOptions.path}`)
+    updateResponse(`使用打印机: ${printOptions.printer_setting}`)
+    
+  } catch (error) {
+    updateResponse(`打印PDF失败: ${error.message || error}`)
   }
 }
 </script>
@@ -160,6 +159,9 @@ const handlePrintCurrentPage = async () => {
           <button @click="handlePrintCurrentPage" class="action-button print-button">
             打印当前页面
           </button>
+          <button @click="handlePrintSpecificPdf" class="action-button pdf-print-button">
+            打印指定PDF文件
+          </button>
         </div>
         
         <div class="printer-search-section">
@@ -176,6 +178,22 @@ const handlePrintCurrentPage = async () => {
               获取打印机信息
             </button>
           </div>
+        </div>
+        
+        <div class="pdf-file-section">
+          <h3>PDF文件打印设置：</h3>
+          <div class="search-group">
+            <input 
+              v-model="pdfFilePath" 
+              type="text" 
+              placeholder="请输入PDF文件路径" 
+              class="printer-input"
+            />
+            <button @click="handlePrintSpecificPdf" class="pdf-button">
+              打印此PDF文件
+            </button>
+          </div>
+          <p class="file-info">当前文件: {{ pdfFilePath }}</p>
         </div>
         
         <div class="response-area">
@@ -259,6 +277,14 @@ header p {
   box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3) !important;
 }
 
+.pdf-print-button {
+  background: linear-gradient(135deg, #ffa726 0%, #ff7043 100%) !important;
+}
+
+.pdf-print-button:hover {
+  box-shadow: 0 8px 25px rgba(255, 167, 38, 0.3) !important;
+}
+
 .printer-search-section {
   margin: 2rem 0;
   padding: 1.5rem;
@@ -312,6 +338,48 @@ header p {
 .search-button:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
+}
+
+.pdf-file-section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e1e8ed;
+}
+
+.pdf-file-section h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #2c3e50;
+}
+
+.pdf-button {
+  background: linear-gradient(135deg, #ffa726 0%, #ff7043 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.pdf-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 167, 38, 0.3);
+}
+
+.file-info {
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  color: #6c757d;
+  font-size: 0.9rem;
+  word-break: break-all;
 }
 
 .response-area {

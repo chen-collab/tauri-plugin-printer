@@ -26,10 +26,45 @@ export interface PrintPdfOptions {
 }
 
 export async function printPdf(options: PrintPdfOptions): Promise<string> {
+  console.log('打印配置pdf:', options);
   return await invoke<string>('plugin:printer|print_pdf', {
     id: options.id,
     path: options.path,
-    printerSetting: options.printer_setting,
-    removeAfterPrint: options.remove_after_print,
+    printer_setting: options.printer_setting,
+    remove_after_print: options.remove_after_print,
+  });
+}
+
+export interface PrintMargin {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  unit: string;
+}
+
+export interface PrintHtmlOptions {
+  content_type: string;
+  html_content: string;
+  printer_id?: string;
+  page_size?: string;
+  orientation?: string;
+  margin?: PrintMargin;
+  quality?: number;
+  grayscale?: boolean;
+  copies?: number;
+}
+
+export async function printHtml(options: PrintHtmlOptions): Promise<string> {
+  return await invoke<string>('plugin:printer|print_html', {
+    contentType: options.content_type,
+    htmlContent: options.html_content,
+    printerId: options.printer_id,
+    pageSize: options.page_size,
+    orientation: options.orientation,
+    margin: options.margin,
+    quality: options.quality,
+    grayscale: options.grayscale,
+    copies: options.copies,
   });
 }

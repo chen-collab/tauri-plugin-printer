@@ -3,9 +3,12 @@
 use std::process::Command;
 use std::{sync::mpsc, io::Write};
 use std::thread;
-use std::fs::File;
+use std::fs::{File};
 use std::env;
-use crate::{declare::PrintOptions, fsys::remove_file};
+use std::path::Path;
+use tempfile::NamedTempFile;
+use crate::declare::{PrintOptions, PrintHtmlOptions};
+use crate::{ fsys::remove_file};
 /**
  * Create sm.exe to temp
  */
@@ -44,10 +47,7 @@ pub fn get_printers() -> String {
         let output = Command::new("powershell")
             .args(["-Command", "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Printer | Select-Object Name, DriverName, JobCount, PrintProcessor, PortName, ShareName, ComputerName, PrinterStatus, Shared, Type, Priority | ConvertTo-Json"])
             .output().unwrap();
-
-
-
-
+        
         let output_string = String::from_utf8_lossy(&output.stdout).to_string();
         sender.send(output_string).unwrap();
     });
@@ -128,6 +128,176 @@ pub fn print_pdf (options: PrintOptions) -> String {
     return result;
 }
 
+
+
+
+/**
+ * 打印 HTML 内容
+ * 
+ * 优化特性:
+ * - 改进的错误处理和资源管理
+ * - 更好的临时文件清理机制
+ * - 增强的 wkhtmltopdf 参数配置
+ * - 支持更多打印选项和边距单位
+ */
+pub fn print_html(options: PrintHtmlOptions) -> String {
+    // 使用 Result 类型进行更好的错误处理
+    match print_html_internal(options) {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("HTML 打印失败: {}", e);
+            format!("打印失败: {}", e)
+        }
+    }
+}
+
+/// 内部实现函数，使用 Result 进行错误处理
+fn print_html_internal(options: PrintHtmlOptions) -> Result<String, String> {
+    // 验证 HTML 内容
+    if options.html.trim().is_empty() {
+        return Err("HTML 内容不能为空".to_string());
+    }
+
+    // 检查 wkhtmltopdf 是否可用
+    check_wkhtmltopdf_availability()?;
+
+    // 创建临时文件
+    let pdf_temp_file = NamedTempFile::new()
+        .map_err(|e| format!("创建 PDF 临时文件失败: {}", e))?;
+    let html_temp_file = NamedTempFile::new()
+        .map_err(|e| format!("创建 HTML 临时文件失败: {}", e))?;
+
+    let pdf_path = pdf_temp_file.path();
+    let html_path = html_temp_file.path();
+
+    // 写入 HTML 内容
+    std::fs::write(html_path, &options.html)
+        .map_err(|e| format!("写入 HTML 内容失败: {}", e))?;
+
+    // 构建 wkhtmltopdf 命令参数
+    let args = build_wkhtmltopdf_args(&options, html_path, pdf_path)?;
+
+    // 执行 HTML 到 PDF 转换
+    execute_wkhtmltopdf(&args)?;
+
+    // 验证 PDF 文件是否生成成功
+    if !pdf_path.exists() {
+        return Err("PDF 文件生成失败".to_string());
+    }
+
+    // 创建打印选项并执行打印
+    let print_options = PrintOptions {
+        path: pdf_path.to_string_lossy().to_string(),
+        id: options.printer_id.unwrap_or_default(),
+        print_setting: options.print_settings.unwrap_or_default(),
+        remove_after_print: options.remove_after_print.unwrap_or(true),
+    };
+
+    // 执行打印
+    let result = print_pdf(print_options);
+
+    // 临时文件会在 NamedTempFile 被 drop 时自动清理
+    Ok(result)
+}
+
+/// 检查 wkhtmltopdf 是否可用
+fn check_wkhtmltopdf_availability() -> Result<(), String> {
+    Command::new("wkhtmltopdf")
+        .arg("--version")
+        .output()
+        .map_err(|_| "wkhtmltopdf 未安装或不在 PATH 中。请先安装 wkhtmltopdf。".to_string())?;
+    Ok(())
+}
+
+/// 构建 wkhtmltopdf 命令参数
+fn build_wkhtmltopdf_args(
+    options: &PrintHtmlOptions,
+    html_path: &Path,
+    pdf_path: &Path,
+) -> Result<Vec<String>, String> {
+    let mut args = vec![
+        "--quiet".to_string(),
+        "--encoding".to_string(),
+        "UTF-8".to_string(),
+        "--enable-local-file-access".to_string(),
+        "--enable-smart-shrinking".to_string(),
+        "--print-media-type".to_string(),
+        "--disable-smart-shrinking".to_string(), // 禁用智能缩放以获得更好的打印质量
+        "--no-pdf-compression".to_string(),      // 禁用 PDF 压缩以提高质量
+    ];
+
+    // 设置默认边距
+    let default_margin = "10mm";
+    args.extend([
+        "--margin-top".to_string(),
+        default_margin.to_string(),
+        "--margin-right".to_string(),
+        default_margin.to_string(),
+        "--margin-bottom".to_string(),
+        default_margin.to_string(),
+        "--margin-left".to_string(),
+        default_margin.to_string(),
+    ]);
+
+    // 设置页面大小
+    if let Some(ref page_size) = options.page_size {
+        args.extend(["--page-size".to_string(), page_size.clone()]);
+    } else {
+        args.extend(["--page-size".to_string(), "A4".to_string()]);
+    }
+
+    // 设置方向
+    if let Some(ref orientation) = options.orientation {
+        args.extend(["--orientation".to_string(), orientation.clone()]);
+    } else {
+        args.extend(["--orientation".to_string(), "Portrait".to_string()]);
+    }
+
+    // 设置自定义边距（会覆盖默认边距）
+    if let Some(ref margin) = options.margin {
+        let unit = margin.unit.as_deref().unwrap_or("mm");
+        
+        if let Some(top) = margin.top {
+            args.extend(["--margin-top".to_string(), format!("{}{}", top, unit)]);
+        }
+        if let Some(right) = margin.right {
+            args.extend(["--margin-right".to_string(), format!("{}{}", right, unit)]);
+        }
+        if let Some(bottom) = margin.bottom {
+            args.extend(["--margin-bottom".to_string(), format!("{}{}", bottom, unit)]);
+        }
+        if let Some(left) = margin.left {
+            args.extend(["--margin-left".to_string(), format!("{}{}", left, unit)]);
+        }
+    }
+
+    // 添加输入和输出文件路径
+    args.push(html_path.to_string_lossy().to_string());
+    args.push(pdf_path.to_string_lossy().to_string());
+
+    Ok(args)
+}
+
+/// 执行 wkhtmltopdf 命令
+fn execute_wkhtmltopdf(args: &[String]) -> Result<(), String> {
+    let output = Command::new("wkhtmltopdf")
+        .args(args)
+        .output()
+        .map_err(|e| format!("执行 wkhtmltopdf 失败: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!(
+            "wkhtmltopdf 转换失败 (退出码: {})\n标准错误: {}\n标准输出: {}",
+            output.status.code().unwrap_or(-1),
+            stderr,
+            stdout
+        ));
+    }
+
+    Ok(())
+}
 
 /**
  * Get printer job on windows using powershell
