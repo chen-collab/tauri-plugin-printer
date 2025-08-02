@@ -19,4 +19,26 @@ impl<R: Runtime> Printer<R> {
       value: payload.value,
     })
   }
+
+  pub fn get_printers(&self) -> crate::Result<String> {
+    #[cfg(target_os = "windows")]
+    {
+      Ok(crate::windows::get_printers())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+      Err(crate::Error::UnsupportedPlatform)
+    }
+  }
+
+  pub fn get_printer_by_name(&self, name: String) -> crate::Result<String> {
+    #[cfg(target_os = "windows")]
+    {
+      Ok(crate::windows::get_printers_by_name(name))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+      Err(crate::Error::UnsupportedPlatform)
+    }
+  }
 }

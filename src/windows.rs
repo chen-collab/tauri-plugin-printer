@@ -65,12 +65,23 @@ pub fn get_printers() -> String {
  * Get printers by name on windows using powershell
  */
 pub fn get_printers_by_name(printername: String) -> String {
-    // let output = Command::new("powershell").args([format!("Get-Printer -Name \"{}\" | Select-Object Name, DriverName, JobCount, PrintProcessor, PortName, ShareName, ComputerName, PrinterStatus, Shared, Type, Priority | ConvertTo-Json", printername)]).output().unwrap();
-    // return output.stdout.to_string();
+    // Create a channel for communication
+    let (sender, receiver) = mpsc::channel();
 
-    let output = Command::new("powershell").args([format!("Get-Printer -Name \"{}\" | Select-Object Name, DriverName, JobCount, PrintProcessor, PortName, ShareName, ComputerName, PrinterStatus, Shared, Type, Priority | ConvertTo-Json", printername)]).output().unwrap();
+    // Spawn a new thread
+    thread::spawn(move || {
+        let output = Command::new("powershell")
+            .args(["-Command", &format!("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Printer -Name '{}' | Select-Object Name, DriverName, JobCount, PrintProcessor, PortName, ShareName, ComputerName, PrinterStatus, Shared, Type, Priority | ConvertTo-Json", printername)])
+            .output().unwrap();
 
-    return String::from_utf8(output.stdout).unwrap();
+        let output_string = String::from_utf8_lossy(&output.stdout).to_string();
+        sender.send(output_string).unwrap();
+    });
+
+    // Receive the result from the spawned thread
+    let result: String = receiver.recv().unwrap();
+
+    return result;
 }
 
 /**

@@ -1,8 +1,9 @@
 <script setup>
 import { ref } from 'vue'
-import { ping, getPrinters } from 'tauri-plugin-printer-api'
+import { ping, getPrinters, getPrinterByName } from 'tauri-plugin-printer-api'
 
 const response = ref('')
+const printerName = ref('')
 
 const updateResponse = (returnValue) => {
   const timestamp = new Date().toLocaleTimeString()
@@ -27,6 +28,20 @@ const handleGetPrinters = async () => {
     updateResponse(`获取打印机列表失败: ${error}`)
   }
 }
+
+const handleGetPrinterByName = async () => {
+  if (!printerName.value.trim()) {
+    updateResponse('请输入打印机名称')
+    return
+  }
+  
+  try {
+    const result = await getPrinterByName(printerName.value.trim())
+    updateResponse(`打印机信息 [${printerName.value}]: ${result}`)
+  } catch (error) {
+    updateResponse(`获取打印机信息失败 [${printerName.value}]: ${error}`)
+  }
+}
 </script>
 
 <template>
@@ -45,6 +60,22 @@ const handleGetPrinters = async () => {
           <button @click="handleGetPrinters" class="action-button">
             获取打印机列表
           </button>
+        </div>
+        
+        <div class="printer-search-section">
+          <h3>根据名称获取打印机信息：</h3>
+          <div class="search-group">
+            <input 
+              v-model="printerName" 
+              type="text" 
+              placeholder="请输入打印机名称" 
+              class="printer-input"
+              @keyup.enter="handleGetPrinterByName"
+            />
+            <button @click="handleGetPrinterByName" class="search-button">
+              获取打印机信息
+            </button>
+          </div>
         </div>
         
         <div class="response-area">
@@ -118,6 +149,61 @@ header p {
 
 .action-button:nth-child(2):hover {
   box-shadow: 0 8px 25px rgba(245, 87, 108, 0.3);
+}
+
+.printer-search-section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e1e8ed;
+}
+
+.printer-search-section h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #2c3e50;
+}
+
+.search-group {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.printer-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 12px 16px;
+  border: 2px solid #e1e8ed;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+
+.printer-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.search-button {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.search-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
 }
 
 .response-area {

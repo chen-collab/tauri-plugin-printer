@@ -11,3 +11,18 @@ pub(crate) async fn ping<R: Runtime>(
 ) -> Result<PingResponse> {
     app.printer().ping(payload)
 }
+
+#[command]
+pub(crate) async fn get_printers<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<String> {
+    app.printer().get_printers()
+}
+
+#[command]
+pub(crate) async fn get_printer_by_name<R: Runtime>(
+    app: AppHandle<R>,
+    name: String,
+) -> Result<String> {
+    app.printer().get_printer_by_name(name)
+}

@@ -11,3 +11,9 @@ export async function ping(value: string): Promise<string | null> {
 export async function getPrinters(): Promise<string> {
   return await invoke<string>('plugin:printer|get_printers');
 }
+
+export async function getPrinterByName(printerName: string): Promise<string> {
+  return await invoke<string>('plugin:printer|get_printers_by_name', {
+    printername: printerName,
+  });
+}
