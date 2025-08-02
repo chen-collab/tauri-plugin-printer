@@ -19,6 +19,9 @@ pub struct PrintHtmlOptions {
     pub page_size: Option<String>,  // A4, Letter 等
     pub orientation: Option<String>,  // portrait, landscape
     pub margin: Option<PrintMargin>,
+    pub quality: Option<u32>,  // 1-100
+    pub grayscale: Option<bool>,
+    pub copies: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { ping, getPrinters, getPrinterByName, printPdf } from 'tauri-plugin-printer-api'
+import { ping, getPrinters, getPrinterByName, printPdf, printHtml } from 'tauri-plugin-printer-api'
 // import { writeTextFile, BaseDirectory } from '@tauri-apps/api/fs'
 
  
@@ -50,61 +50,206 @@ const handleGetPrinterByName = async () => {
 
 const handlePrintCurrentPage = async () => {
   try {
-    updateResponse('开始打印当前页面...')
+    updateResponse('🖨️ 开始打印当前页面...')
     
-    // 模拟生成当前页面的HTML内容
+    // 验证打印机设置
+    const selectedPrinter = printerName.value.trim()
+    if (!selectedPrinter) {
+      updateResponse('⚠️ 警告: 未指定打印机，将使用默认打印机')
+    } else {
+      updateResponse(`📋 使用打印机: ${selectedPrinter}`)
+    }
+    
+    // 生成优化的HTML内容
+    const currentTime = new Date().toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    })
+    
     const htmlContent = `
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tauri Plugin Printer 测试页面</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { color: #2c3e50; }
-        .content { margin: 20px 0; }
-        .log { background: #f1f3f4; padding: 10px; border-radius: 5px; }
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background: white;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin: 0;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        .content {
+            margin: 20px 0;
+        }
+        .info-box {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .info-title {
+            font-weight: bold;
+            color: #495057;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .log-section {
+            background: #f1f3f4;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            border-left: 4px solid #3498db;
+        }
+        .log-content {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .print-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 15px 0;
+            padding: 10px;
+            background: #e8f4fd;
+            border-radius: 6px;
+        }
+        @media print {
+            body { background: white; }
+            .no-print { display: none; }
+        }
     </style>
 </head>
 <body>
-    <h1>Tauri Plugin Printer 演示应用</h1>
-    <div class="content">
-        <h2>当前页面打印测试</h2>
-        <p>这是一个测试打印功能的页面。</p>
-        <p>打印时间: ${new Date().toLocaleString()}</p>
+    <div class="header">
+        <h1>🖨️ Tauri Plugin Printer 演示应用</h1>
+        <div class="subtitle">HTML 打印功能测试页面</div>
     </div>
-    <div class="log">
-        <h3>响应日志:</h3>
-        <pre>${response.value || '暂无日志'}</pre>
+    
+    <div class="content">
+        <div class="info-box">
+            <div class="info-title">📄 当前页面打印测试</div>
+            <p>这是一个测试 Tauri Plugin Printer 的 HTML 打印功能的页面。</p>
+            <div class="print-info">
+                <span><strong>打印时间:</strong> ${currentTime}</span>
+                <span><strong>页面类型:</strong> HTML 转 PDF</span>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <div class="info-title">⚙️ 打印配置信息</div>
+            <p><strong>打印机:</strong> ${selectedPrinter || '默认打印机'}</p>
+            <p><strong>页面大小:</strong> A4</p>
+            <p><strong>方向:</strong> 纵向 (Portrait)</p>
+            <p><strong>边距:</strong> 10mm (上下左右)</p>
+            <p><strong>质量:</strong> 300 DPI</p>
+        </div>
+    </div>
+    
+    <div class="log-section">
+        <div class="info-title">📋 响应日志</div>
+        <div class="log-content">${response.value || '暂无日志信息'}</div>
+    </div>
+    
+    <div class="footer">
+        <p>由 Tauri Plugin Printer 生成 | ${currentTime}</p>
+        <p>此页面通过 wkhtmltopdf 转换为 PDF 后打印</p>
     </div>
 </body>
 </html>
     `
     
-    updateResponse(`生成的HTML内容长度: ${htmlContent.length} 字符`)
+    updateResponse(`📝 生成的HTML内容长度: ${htmlContent.length} 字符`)
+    updateResponse(`🔧 准备打印配置...`)
     
-    // 模拟文件写入过程
-    const fileName = `print_page_${Date.now()}.html`
-    updateResponse(`模拟创建临时文件: ${fileName}`)
-    
-    // 调用打印API
-    const printId = `print_${Date.now()}`
+    // 构建优化的打印选项
     const printOptions = {
-      printer_setting: 'Wondershare PDFelement',
-      remove_after_print: true
+      html: htmlContent,
+      printer_id: selectedPrinter || undefined,
+      print_settings: undefined,
+      remove_after_print: true,
+      page_size: 'A4',
+      orientation: 'Portrait',
+      margin: {
+        top: 10.0,
+        bottom: 10.0,
+        left: 10.0,
+        right: 10.0,
+        unit: 'mm'
+      },
+      quality: 300,
+      grayscale: false,
+      copies: 1
     }
     
-    const result = await printPdf(printId, fileName, printOptions)
-    updateResponse(`打印任务已提交: ${result}`)
+    updateResponse(`⚙️ 打印配置详情:\n${JSON.stringify(printOptions, null, 2)}`)
+    updateResponse(`🚀 正在提交打印任务...`)
     
-    // 模拟浏览器打印功能
-    updateResponse('同时触发浏览器打印对话框...')
+    const result = await printHtml(printOptions)
+    updateResponse(`✅ 打印任务已成功提交: ${result}`)
+    
+    // 可选：同时触发浏览器打印对话框作为备选方案
+    updateResponse('🌐 同时准备浏览器打印对话框作为备选方案...')
     setTimeout(() => {
-      window.print()
-    }, 500)
+      try {
+        window.print()
+        updateResponse('🖨️ 浏览器打印对话框已打开')
+      } catch (printError) {
+        updateResponse(`⚠️ 浏览器打印失败: ${printError}`)
+      }
+    }, 1000)
     
   } catch (error) {
-    updateResponse(`打印失败: ${error}`)
+    updateResponse(`❌ 打印失败: ${error}`)
+    updateResponse(`💡 建议检查: 1) 打印机是否可用 2) wkhtmltopdf 是否已安装 3) 网络连接是否正常`)
   }
 }
 

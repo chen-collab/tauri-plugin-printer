@@ -44,9 +44,10 @@ export interface PrintMargin {
 }
 
 export interface PrintHtmlOptions {
-  content_type: string;
-  html_content: string;
+  html: string;
   printer_id?: string;
+  print_settings?: string;
+  remove_after_print?: boolean;
   page_size?: string;
   orientation?: string;
   margin?: PrintMargin;
@@ -57,10 +58,11 @@ export interface PrintHtmlOptions {
 
 export async function printHtml(options: PrintHtmlOptions): Promise<string> {
   return await invoke<string>('plugin:printer|print_html', {
-    contentType: options.content_type,
-    htmlContent: options.html_content,
-    printerId: options.printer_id,
-    pageSize: options.page_size,
+    html: options.html,
+    printer_id: options.printer_id,
+    print_settings: options.print_settings,
+    remove_after_print: options.remove_after_print,
+    page_size: options.page_size,
     orientation: options.orientation,
     margin: options.margin,
     quality: options.quality,
