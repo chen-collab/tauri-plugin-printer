@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "printer:allow-ping",
+    "printer:allow-get-printers",
+    "printer:allow-get-printers-by-name",
+    "printer:allow-print-pdf",
+    "printer:allow-custom-get-printers-by-name",
+    "printer:allow-custom-print-pdf",
+    "printer:allow-get-jobs",
+    "printer:allow-get-jobs-by-id",
+    "printer:allow-resume-job",
+    "printer:allow-restart-job",
+    "printer:allow-pause-job",
+    "printer:allow-remove-job"
+  ]
+}
