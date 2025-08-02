@@ -2,6 +2,14 @@
 
 一个用于 Tauri V2 的打印机插件，支持获取打印机列表、打印 PDF 文件、管理打印任务等功能。
 
+## 致谢
+
+本项目基于以下开源项目开发：
+- [alfianlensundev/tauri-plugin-printer](https://github.com/alfianlensundev/tauri-plugin-printer) - 原始 Tauri 打印机插件
+- [adao99/tauri-plugin-printer-v2](https://github.com/adao99/tauri-plugin-printer-v2) - Tauri v2.0 版本的打印机插件
+
+感谢原作者们的贡献和开源精神。
+
 ## ✨ 特性
 
 - 🖨️ 获取系统打印机列表
