@@ -14,6 +14,7 @@
 
 - 🖨️ 获取系统打印机列表
 - 📄 打印 PDF 文件
+- 🌐 打印 HTML 内容
 - 📋 管理打印任务（暂停、恢复、重启、删除）
 - 🔍 按名称查询打印机
 - 📊 获取打印任务状态
@@ -91,6 +92,7 @@ import {
   getPrinters,
   getPrintersByName,
   printPdf,
+  printHtml,
   getJobs,
   getJobsById,
   resumeJob,
@@ -113,10 +115,16 @@ const printResult = await printPdf({
   subset: 'odd'
 });
 
-// 4. 获取打印任务
+// 4. 打印 HTML 内容
+const htmlPrintResult = await printHtml({
+  html: '<h1>Hello World</h1><p>这是一个HTML打印测试</p>',
+  printer: 'Microsoft Print to PDF'
+});
+
+// 5. 获取打印任务
 const jobs = await getJobs('Microsoft Print to PDF');
 
-// 5. 管理打印任务
+// 6. 管理打印任务
 const jobId = '123';
 const printerName = 'Microsoft Print to PDF';
 
@@ -152,6 +160,13 @@ await removeJob(printerName, jobId);
 - `printer`: 打印机名称
 - `pages`: 页面范围（可选）
 - `subset`: 页面子集（可选）
+
+### `printHtml(options: HtmlPrintOptions): Promise<string>`
+打印 HTML 内容。
+
+**HtmlPrintOptions 参数：**
+- `html`: HTML 内容字符串
+- `printer`: 打印机名称
 
 ### 打印任务管理
 
@@ -212,6 +227,7 @@ permissions = [
   "allow-get-printers", 
   "allow-get-printers-by-name", 
   "allow-print-pdf", 
+  "allow-print-html",
   "allow-get-jobs", 
   "allow-get-jobs-by-id", 
   "allow-resume-job", 
