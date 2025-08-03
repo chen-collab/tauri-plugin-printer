@@ -8,7 +8,9 @@ import { ping, getPrinters, getPrinterByName, printPdf, printHtml } from 'tauri-
 
 const response = ref('')
 const printerName = ref('')
-const pdfFilePath = ref('D:\\Downloads\\平心堂项目报价.pdf')
+const pdfFilePath = ref('./assets/平心堂项目报价.pdf')
+const printersList = ref([])
+const selectedPrinter = ref('')
 
 const updateResponse = (returnValue) => {
   const timestamp = new Date().toLocaleTimeString()
@@ -29,8 +31,49 @@ const handleGetPrinters = async () => {
   try {
     const result = await getPrinters()
     updateResponse(`打印机列表: ${result}`)
+    
+    // 解析打印机列表数据
+    try {
+      const parsedResult = JSON.parse(result)
+      if (Array.isArray(parsedResult)) {
+        printersList.value = parsedResult.map((printer, index) => ({
+          id: index + 1,
+          name: printer.Name || printer,
+          status: printer.PrinterStatus || '未知',
+          isDefault: printer.isDefault || false,
+          driver: printer.DriverName || '未知',
+          port: printer.PortName || '未知'
+        }))
+        updateResponse(`成功解析 ${printersList.value.length} 台打印机`)
+      } else {
+        // 如果返回的是字符串列表，按行分割
+        const printerNames = result.split('\n').filter(name => name.trim())
+        printersList.value = printerNames.map((name, index) => ({
+          id: index + 1,
+          name: name.trim(),
+          status: '可用',
+          isDefault: index === 0,
+          driver: '未知',
+          port: '未知'
+        }))
+        updateResponse(`成功解析 ${printersList.value.length} 台打印机`)
+      }
+    } catch (parseError) {
+      updateResponse(`解析打印机列表失败: ${parseError}`)
+      // 作为备选方案，尝试简单的字符串分割
+      const printerNames = result.split(',').filter(name => name.trim())
+      printersList.value = printerNames.map((name, index) => ({
+        id: index + 1,
+        name: name.trim(),
+        status: '可用',
+        isDefault: index === 0,
+        driver: '未知',
+        port: '未知'
+      }))
+    }
   } catch (error) {
     updateResponse(`获取打印机列表失败: ${error}`)
+    printersList.value = []
   }
 }
 
@@ -48,16 +91,22 @@ const handleGetPrinterByName = async () => {
   }
 }
 
+const handleSelectPrinter = (printer) => {
+  selectedPrinter.value = printer.name
+  printerName.value = printer.name
+  updateResponse(`已选择打印机: ${printer.name}`)
+}
+
 const handlePrintCurrentPage = async () => {
   try {
     updateResponse('🖨️ 开始打印当前页面...')
     
     // 验证打印机设置
-    const selectedPrinter = printerName.value.trim()
-    if (!selectedPrinter) {
+    const currentPrinter = selectedPrinter.value || printerName.value.trim()
+    if (!currentPrinter) {
       updateResponse('⚠️ 警告: 未指定打印机，将使用默认打印机')
     } else {
-      updateResponse(`📋 使用打印机: ${selectedPrinter}`)
+      updateResponse(`📋 使用打印机: ${currentPrinter}`)
     }
     
     // 生成优化的HTML内容
@@ -186,7 +235,7 @@ const handlePrintCurrentPage = async () => {
         
         <div class="info-box">
             <div class="info-title">⚙️ 打印配置信息</div>
-            <p><strong>打印机:</strong> ${selectedPrinter || '默认打印机'}</p>
+            <p><strong>打印机:</strong> ${currentPrinter || '默认打印机'}</p>
             <p><strong>页面大小:</strong> A4</p>
             <p><strong>方向:</strong> 纵向 (Portrait)</p>
             <p><strong>边距:</strong> 10mm (上下左右)</p>
@@ -213,7 +262,7 @@ const handlePrintCurrentPage = async () => {
     // 构建优化的打印选项
     const printOptions = {
       html: htmlContent,
-      printer_id: selectedPrinter || undefined,
+      printer_id: currentPrinter || undefined,
       print_settings: undefined,
       remove_after_print: true,
       page_size: 'A4',
@@ -309,6 +358,59 @@ const handlePrintSpecificPdf = async () => {
           </button>
         </div>
         
+        <div class="printer-list-section" v-if="printersList.length > 0">
+          <h3>📋 可用打印机列表：</h3>
+          <div class="current-printer" v-if="selectedPrinter">
+            <span class="current-label">当前选择：</span>
+            <span class="current-name">{{ selectedPrinter }}</span>
+          </div>
+          <div class="table-container">
+            <table class="printers-table">
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>打印机名称</th>
+                  <th>状态</th>
+                  <th>默认</th>
+                  <th>驱动</th>
+                  <th>端口</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr 
+                  v-for="printer in printersList" 
+                  :key="printer.id"
+                  :class="{ 'selected-row': selectedPrinter === printer.name }"
+                >
+                  <td>{{ printer.id }}</td>
+                  <td class="printer-name">{{ printer.name }}</td>
+                  <td>
+                    <span class="status-badge" :class="printer.status === '可用' ? 'status-available' : 'status-unknown'">
+                      {{ printer.status }}
+                    </span>
+                  </td>
+                  <td>
+                    <span v-if="printer.isDefault" class="default-badge">✓</span>
+                    <span v-else>-</span>
+                  </td>
+                  <td class="driver-info">{{ printer.driver }}</td>
+                  <td class="port-info">{{ printer.port }}</td>
+                  <td>
+                    <button 
+                      @click="handleSelectPrinter(printer)" 
+                      class="select-button"
+                      :class="{ 'selected': selectedPrinter === printer.name }"
+                    >
+                      {{ selectedPrinter === printer.name ? '已选择' : '选择' }}
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="printer-search-section">
           <h3>根据名称获取打印机信息：</h3>
           <div class="search-group">
@@ -323,22 +425,6 @@ const handlePrintSpecificPdf = async () => {
               获取打印机信息
             </button>
           </div>
-        </div>
-        
-        <div class="pdf-file-section">
-          <h3>PDF文件打印设置：</h3>
-          <div class="search-group">
-            <input 
-              v-model="pdfFilePath" 
-              type="text" 
-              placeholder="请输入PDF文件路径" 
-              class="printer-input"
-            />
-            <button @click="handlePrintSpecificPdf" class="pdf-button">
-              打印此PDF文件
-            </button>
-          </div>
-          <p class="file-info">当前文件: {{ pdfFilePath }}</p>
         </div>
         
         <div class="response-area">
@@ -428,6 +514,150 @@ header p {
 
 .pdf-print-button:hover {
   box-shadow: 0 8px 25px rgba(255, 167, 38, 0.3) !important;
+}
+
+.printer-list-section {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e1e8ed;
+}
+
+.printer-list-section h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #2c3e50;
+}
+
+.current-printer {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.current-label {
+  font-weight: 600;
+}
+
+.current-name {
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.table-container {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e1e8ed;
+}
+
+.printers-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.printers-table th {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  color: #495057;
+  font-weight: 600;
+  padding: 1rem 0.75rem;
+  text-align: left;
+  border-bottom: 2px solid #dee2e6;
+  font-size: 0.9rem;
+}
+
+.printers-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #f1f3f4;
+  vertical-align: middle;
+}
+
+.printers-table tbody tr {
+  transition: all 0.2s ease;
+}
+
+.printers-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.selected-row {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%) !important;
+  border-left: 4px solid #667eea;
+}
+
+.printer-name {
+  font-weight: 600;
+  color: #2c3e50;
+  max-width: 200px;
+  word-break: break-word;
+}
+
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-available {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status-unknown {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.default-badge {
+  color: #28a745;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.driver-info,
+.port-info {
+  color: #6c757d;
+  font-size: 0.9rem;
+  max-width: 120px;
+  word-break: break-word;
+}
+
+.select-button {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 70px;
+}
+
+.select-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.select-button.selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  cursor: default;
+}
+
+.select-button.selected:hover {
+  transform: none;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
 .printer-search-section {
