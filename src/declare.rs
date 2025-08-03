@@ -1,34 +1,37 @@
 use serde::{Deserialize, Serialize};
+ 
+
+ 
 
 pub struct PrintOptions {
-    // pub content_type: String,  // "pdf" 或 "html"
-    // pub html: String,  // HTML 内容
-    pub id: String,
-    pub path: String,
-    pub print_setting: String,
-    pub remove_after_print: bool
+    pub id: String,  // 打印任务 ID
+    pub path: String,  // 打印文件路径
+    pub printer: String,  // 打印机名称
+    pub print_settings: String,  // 打印设置
+    pub remove_after_print: Option<bool>,  // 打印完成后删除文件
 }
 
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PrintHtmlOptions {
-    pub html: String,
-    pub printer_id: Option<String>,
-    pub print_settings: Option<String>,
-    pub remove_after_print: Option<bool>,
+    pub id: String,  // 打印任务 ID
+    pub html: String,  // HTML 内容
+    pub printer: String,  // 打印机名称
+    pub print_settings: String,  // 打印设置
+    pub remove_after_print: Option<bool>,  // 打印完成后删除文件
     pub page_size: Option<String>,  // A4, Letter 等
     pub orientation: Option<String>,  // portrait, landscape
-    pub margin: Option<PrintMargin>,
-    pub quality: Option<u32>,  // 1-100
-    pub grayscale: Option<bool>,
-    pub copies: Option<u32>,
+    pub margin: Option<PrintMargin>,  // 页边距
+    pub quality: Option<u32>,  // 打印质量
+    pub grayscale: Option<bool>,  // 灰度打印
+    pub copies: Option<u32>,  // 打印份数
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PrintMargin {
-    pub top: Option<f64>,
-    pub right: Option<f64>,
-    pub bottom: Option<f64>,
-    pub left: Option<f64>,
+    pub top: Option<f64>,  // 上边距
+    pub right: Option<f64>,  // 右边距
+    pub bottom: Option<f64>,  // 下边距
+    pub left: Option<f64>,  // 左边距
     pub unit: Option<String>,  // mm, cm, inch
 }

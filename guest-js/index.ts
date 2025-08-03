@@ -21,7 +21,8 @@ export async function getPrinterByName(printerName: string): Promise<string> {
 export interface PrintPdfOptions {
   id: string;
   path: string;
-  printer_setting: string;
+  printer: string;
+  print_settings: string;
   remove_after_print: boolean;
 }
 
@@ -30,7 +31,8 @@ export async function printPdf(options: PrintPdfOptions): Promise<string> {
   return await invoke<string>('plugin:printer|print_pdf', {
     id: options.id,
     path: options.path,
-    printer_setting: options.printer_setting,
+    printer: options.printer,
+    print_settings: options.print_settings,
     remove_after_print: options.remove_after_print,
   });
 }
@@ -44,8 +46,9 @@ export interface PrintMargin {
 }
 
 export interface PrintHtmlOptions {
+  id: string;
   html: string;
-  printer_id?: string;
+  printer: string;
   print_settings?: string;
   remove_after_print?: boolean;
   page_size?: string;

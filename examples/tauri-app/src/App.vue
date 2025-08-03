@@ -11,6 +11,16 @@ const selectedFileName = ref('')
 const printersList = ref([])
 const selectedPrinter = ref('')
 
+// 打印设置
+const printSettings = ref({
+  orientation: 'Portrait', // Portrait, Landscape
+  paperSize: 'A4', // A4, A3, Letter, Legal, Custom
+  copies: 1, // 打印份数
+  quality: 300, // DPI
+  grayscale: false, // 是否灰度打印
+  duplex: 'None' // None, Horizontal, Vertical
+})
+
 const updateResponse = (returnValue) => {
   const timestamp = new Date().toLocaleTimeString()
   const value = typeof returnValue === 'string' ? returnValue : JSON.stringify(returnValue)
@@ -260,10 +270,12 @@ const handlePrintCurrentPage = async () => {
         <div class="info-box">
             <div class="info-title">⚙️ 打印配置信息</div>
             <p><strong>打印机:</strong> ${currentPrinter || '默认打印机'}</p>
-            <p><strong>页面大小:</strong> A4</p>
-            <p><strong>方向:</strong> 纵向 (Portrait)</p>
+            <p><strong>页面大小:</strong> ${printSettings.value.paperSize}</p>
+            <p><strong>方向:</strong> ${printSettings.value.orientation === 'Portrait' ? '纵向 (Portrait)' : '横向 (Landscape)'}</p>
+            <p><strong>打印份数:</strong> ${printSettings.value.copies} 份</p>
+            <p><strong>打印质量:</strong> ${printSettings.value.quality} DPI</p>
+            <p><strong>颜色模式:</strong> ${printSettings.value.grayscale ? '灰度' : '彩色'}</p>
             <p><strong>边距:</strong> 10mm (上下左右)</p>
-            <p><strong>质量:</strong> 300 DPI</p>
         </div>
     </div>
     
@@ -282,15 +294,45 @@ const handlePrintCurrentPage = async () => {
     
     updateResponse(`📝 生成的HTML内容长度: ${htmlContent.length} 字符`)
     updateResponse(`🔧 准备打印配置...`)
-    
+     const printId = `html_print_${Date.now()}`
     // 构建优化的打印选项
     const printOptions = {
+      id: printId,
       html: htmlContent,
-      printer_id: currentPrinter || undefined,
-      print_settings: undefined,
+      printer: currentPrinter || 'default',
+      print_settings: (() => {
+        const settings = [];
+        
+        // 添加打印方向
+        if (printSettings.value.orientation === 'Landscape') {
+          settings.push('landscape');
+        } else {
+          settings.push('portrait');
+        }
+        
+        // 添加纸张大小
+        settings.push(`paper=${printSettings.value.paperSize}`);
+        
+        // 添加缩放设置
+        settings.push('fit');
+        
+        // 添加颜色设置
+        if (printSettings.value.grayscale) {
+          settings.push('monochrome');
+        } else {
+          settings.push('color');
+        }
+        
+        // 添加打印份数（如果大于1）
+        if (printSettings.value.copies > 1) {
+          settings.push(`${printSettings.value.copies}x`);
+        }
+        
+        return settings.join(',');
+      })(),
       remove_after_print: true,
-      page_size: 'A4',
-      orientation: 'Portrait',
+      page_size: printSettings.value.paperSize,
+      orientation: printSettings.value.orientation,
       margin: {
         top: 10.0,
         bottom: 10.0,
@@ -298,9 +340,9 @@ const handlePrintCurrentPage = async () => {
         right: 10.0,
         unit: 'mm'
       },
-      quality: 300,
-      grayscale: false,
-      copies: 1
+      quality: printSettings.value.quality,
+      grayscale: printSettings.value.grayscale,
+      copies: printSettings.value.copies
     }
     
     // updateResponse(`⚙️ 打印配置详情:\n${JSON.stringify(printOptions, null, 2)}`)
@@ -349,7 +391,37 @@ const handlePrintSpecificPdf = async () => {
     const printOptions = {
       id: printId, 
       path: pdfFilePath.value, 
-      printer_setting: currentPrinter || 'default',
+      printer: currentPrinter || 'default',
+      print_settings: (() => {
+        const settings = [];
+        
+        // 添加打印方向
+        if (printSettings.value.orientation === 'Landscape') {
+          settings.push('landscape');
+        } else {
+          settings.push('portrait');
+        }
+        
+        // 添加纸张大小
+        settings.push(`paper=${printSettings.value.paperSize}`);
+        
+        // 添加缩放设置
+        settings.push('fit');
+        
+        // 添加颜色设置
+        if (printSettings.value.grayscale) {
+          settings.push('monochrome');
+        } else {
+          settings.push('color');
+        }
+        
+        // 添加打印份数（如果大于1）
+        if (printSettings.value.copies > 1) {
+          settings.push(`${printSettings.value.copies}x`);
+        }
+        
+        return settings.join(',');
+      })(),
       remove_after_print: false // 不删除原文件
     }
     
@@ -396,6 +468,63 @@ const handlePrintSpecificPdf = async () => {
             <button @click="handlePrintCurrentPage" class="action-button print-button">
               📄 打印当前页面
             </button>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <h3>⚙️ 打印设置</h3>
+          <div class="print-settings">
+            <div class="setting-group">
+              <label class="setting-label">📐 打印方向</label>
+              <select v-model="printSettings.orientation" class="setting-select">
+                <option value="Portrait">📄 纵向 (Portrait)</option>
+                <option value="Landscape">📄 横向 (Landscape)</option>
+              </select>
+            </div>
+            
+            <div class="setting-group">
+              <label class="setting-label">📏 纸张大小</label>
+              <select v-model="printSettings.paperSize" class="setting-select">
+                <option value="A4">📋 A4 (210×297mm)</option>
+                <option value="A3">📋 A3 (297×420mm)</option>
+                <option value="Letter">📋 Letter (216×279mm)</option>
+                <option value="Legal">📋 Legal (216×356mm)</option>
+                <option value="A5">📋 A5 (148×210mm)</option>
+              </select>
+            </div>
+            
+            <div class="setting-group">
+              <label class="setting-label">🔢 打印份数</label>
+              <div class="copies-control">
+                <button @click="printSettings.copies = Math.max(1, printSettings.copies - 1)" class="copies-btn">-</button>
+                <input v-model.number="printSettings.copies" type="number" min="1" max="99" class="copies-input" />
+                <button @click="printSettings.copies = Math.min(99, printSettings.copies + 1)" class="copies-btn">+</button>
+              </div>
+            </div>
+            
+            <div class="setting-group">
+              <label class="setting-label">🎨 打印质量</label>
+              <select v-model.number="printSettings.quality" class="setting-select">
+                <option :value="150">📊 草稿 (150 DPI)</option>
+                <option :value="300">📊 标准 (300 DPI)</option>
+                <option :value="600">📊 高质量 (600 DPI)</option>
+                <option :value="1200">📊 超高质量 (1200 DPI)</option>
+              </select>
+            </div>
+            
+            <div class="setting-group">
+              <label class="setting-checkbox">
+                <input v-model="printSettings.grayscale" type="checkbox" class="checkbox-input" />
+                <span class="checkbox-label">⚫ 灰度打印</span>
+              </label>
+            </div>
+            
+            <div class="current-settings">
+              <div class="settings-preview">
+                <span class="preview-label">当前设置：</span>
+                <span class="preview-value">{{ printSettings.orientation === 'Portrait' ? '纵向' : '横向' }} | {{ printSettings.paperSize }} | {{ printSettings.copies }}份 | {{ printSettings.quality }}DPI{{ printSettings.grayscale ? ' | 灰度' : '' }}</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -876,7 +1005,144 @@ header p {
   box-shadow: 0 6px 20px rgba(40, 167, 69, 0.3);
 }
 
+/* 打印设置样式 */
+.print-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
 
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.setting-label {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.setting-select {
+  padding: 8px 12px;
+  border: 2px solid #e1e8ed;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: white;
+  transition: border-color 0.3s ease;
+  cursor: pointer;
+}
+
+.setting-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.copies-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 150px;
+}
+
+.copies-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copies-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.copies-input {
+  width: 60px;
+  padding: 6px 8px;
+  border: 2px solid #e1e8ed;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.copies-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.setting-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: background-color 0.3s ease;
+}
+
+.setting-checkbox:hover {
+  background: #f8f9fa;
+}
+
+.checkbox-input {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.checkbox-label {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.current-settings {
+  margin-top: 0.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.settings-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.preview-label {
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.85rem;
+}
+
+.preview-value {
+  font-weight: 700;
+  color: #2c3e50;
+  font-size: 0.9rem;
+  background: white;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
 
 .response-area {
   background: white;

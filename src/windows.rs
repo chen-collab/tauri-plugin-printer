@@ -88,14 +88,19 @@ pub fn get_printers_by_name(printername: String) -> String {
  */
 pub fn print_pdf (options: PrintOptions) -> String {
     println!("options id {}", options.id);
-    println!("options print_setting {}", options.print_setting);
+    println!("options print_settings {:?}", options.print_settings);
 
     let dir: std::path::PathBuf = env::temp_dir();
-    let print_setting: String = options.print_setting;
-    let shell_command = if print_setting.is_empty() {
+    let printer = options.printer;
+    let print_settings = options.print_settings;
+    let shell_command = if printer.is_empty() || printer == "default" {
         format!("{}sm.exe -print-to-default -silent \"{}\"", dir.display(), options.path)
     } else {
-        format!("{}sm.exe -print-to \"{}\" -silent \"{}\"", dir.display(), print_setting, options.path)
+        if print_settings.is_empty() {
+            format!("{}sm.exe -print-to \"{}\" -silent \"{}\"", dir.display(), printer, options.path)
+        } else {
+            format!("{}sm.exe -print-to \"{}\"  -print-settings \"{}\" -silent \"{}\"", dir.display(), printer, print_settings, options.path)
+        }
     };
     
 
@@ -120,7 +125,7 @@ pub fn print_pdf (options: PrintOptions) -> String {
     
     
 
-    if options.remove_after_print == true {
+    if options.remove_after_print == Some(true) {
         let _ = remove_file(&options.path);
     }
     
@@ -206,10 +211,11 @@ fn print_html_internal(options: PrintHtmlOptions) -> Result<String, String> {
 
     // 创建打印选项并执行打印
     let print_options = PrintOptions {
+        id: options.id,
         path: pdf_path.to_string_lossy().to_string(),
-        id: options.printer_id.unwrap_or_default(),
-        print_setting: options.print_settings.unwrap_or_default(),
-        remove_after_print: options.remove_after_print.unwrap_or(true),
+        printer: options.printer,
+        print_settings: options.print_settings,
+        remove_after_print: options.remove_after_print,
     };
 
     // 执行打印
@@ -270,11 +276,11 @@ fn build_wkhtmltopdf_args(
     }
 
     // 设置方向
-    if let Some(ref orientation) = options.orientation {
-        args.extend(["--orientation".to_string(), orientation.clone()]);
-    } else {
-        args.extend(["--orientation".to_string(), "Portrait".to_string()]);
-    }
+    // if let Some(ref orientation) = options.orientation {
+    //     args.extend(["--orientation".to_string(), orientation.clone()]);
+    // } else {
+    //     args.extend(["--orientation".to_string(), "Portrait".to_string()]);
+    // }
 
     // 设置自定义边距（会覆盖默认边距）
     if let Some(ref margin) = options.margin {

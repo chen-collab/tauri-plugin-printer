@@ -134,16 +134,18 @@ fn get_printers_by_name(printername: String) -> String {
 fn print_pdf(
     id: String,
     path: String,
-    printer_setting: String,
-    remove_after_print: bool,
+    printer: String,
+    print_settings: String,
+    remove_after_print: Option<bool>,
 ) -> String {
      
     if cfg!(windows) {
         let options = declare::PrintOptions { 
             id,
             path,
-            print_setting: printer_setting,
-            remove_after_print: remove_after_print,
+            printer,
+            print_settings,
+            remove_after_print,
         };
         return windows::print_pdf(options);
     }
@@ -259,15 +261,17 @@ pub fn custom_get_printers_by_name(printername: String) -> String {
 pub fn custom_print_pdf(
     id: String,
     path: String,
-    printer_setting: String,
-    remove_after_print: bool,
+    printer: String,
+    print_settings: String,
+    remove_after_print: Option<bool>,
 ) -> String {
     if cfg!(windows) {
         let options = declare::PrintOptions {
             id,
             path,
-            print_setting: printer_setting,
-            remove_after_print: remove_after_print,
+            printer,
+            print_settings,
+            remove_after_print,
         };
         return windows::print_pdf(options);
     }
