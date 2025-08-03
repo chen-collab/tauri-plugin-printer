@@ -15,13 +15,14 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "vue": "^3.5.18",
-    "tauri-plugin-printer-api": "file:../../"
+    "@tauri-apps/plugin-dialog": "~2.3.2",
+    "tauri-plugin-printer-api": "file:../../",
+    "vue": "^3.5.18"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.7.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "vite": "^7.0.6",
-    "vite-plugin-vue-devtools": "^8.0.0",
-    "@tauri-apps/cli": "^2.7.0"
+    "vite-plugin-vue-devtools": "^8.0.0"
   }
 }

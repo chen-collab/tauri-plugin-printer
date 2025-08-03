@@ -11,3 +11,54 @@ export async function ping(value: string): Promise<string | null> {
 export async function getPrinters(): Promise<string> {
   return await invoke<string>('plugin:printer|get_printers');
 }
+
+export async function getPrinterByName(printerName: string): Promise<string> {
+  return await invoke<string>('plugin:printer|get_printers_by_name', {
+    printername: printerName,
+  });
+}
+
+export interface PrintPdfOptions {
+  id: string;
+  path: string;
+  printer_setting: string;
+  remove_after_print: boolean;
+}
+
+export async function printPdf(options: PrintPdfOptions): Promise<string> {
+  console.log('打印配置pdf:', options);
+  return await invoke<string>('plugin:printer|print_pdf', {
+    id: options.id,
+    path: options.path,
+    printer_setting: options.printer_setting,
+    remove_after_print: options.remove_after_print,
+  });
+}
+
+export interface PrintMargin {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  unit: string;
+}
+
+export interface PrintHtmlOptions {
+  html: string;
+  printer_id?: string;
+  print_settings?: string;
+  remove_after_print?: boolean;
+  page_size?: string;
+  orientation?: string;
+  margin?: PrintMargin;
+  quality?: number;
+  grayscale?: boolean;
+  copies?: number;
+}
+
+export async function printHtml(options: PrintHtmlOptions): Promise<string> {
+  console.log('打印配置html:', options);
+  return await invoke<string>('plugin:printer|print_html', {
+    options: options
+  });
+}

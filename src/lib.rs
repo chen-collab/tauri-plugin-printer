@@ -10,6 +10,7 @@ use tauri::{
 use std::env;
 
 pub use crate::models::*;
+use crate::declare::PrintHtmlOptions;
 
 #[cfg(desktop)]
 mod desktop;
@@ -32,6 +33,15 @@ use mobile::Printer;
 #[tauri::command]
 async fn ping<R: Runtime>(app: tauri::AppHandle<R>, payload: PingRequest) -> Result<PingResponse> {
     app.printer().ping(payload)
+}
+
+/**
+ * 打印 HTML 内容
+ */
+#[tauri::command(rename_all = "snake_case")]
+async fn print_html<R: Runtime>(app: tauri::AppHandle<R>, options: PrintHtmlOptions) -> Result<String> {
+    println!("print_html: {:?}", options.print_settings);
+    app.printer().print_html(options)
 }
 
 
@@ -103,6 +113,7 @@ fn get_printers() -> String {
 #[tauri::command(rename_all = "snake_case")]
 // this will be accessible with `invoke('plugin:printer|get_printer_by_name')`.
 fn get_printers_by_name(printername: String) -> String {
+    println!("获取打印机列表: {}", printername);
     if cfg!(windows) {
         return windows::get_printers_by_name(printername);
     }
@@ -126,8 +137,9 @@ fn print_pdf(
     printer_setting: String,
     remove_after_print: bool,
 ) -> String {
+     
     if cfg!(windows) {
-        let options = declare::PrintOptions {
+        let options = declare::PrintOptions { 
             id,
             path,
             print_setting: printer_setting,
@@ -275,6 +287,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("printer")
         .invoke_handler(tauri::generate_handler![
             ping,
+            print_html,
             create_temp_file,
             remove_temp_file,
             get_printers,

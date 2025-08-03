@@ -13,6 +13,7 @@ tauri = { version = "2.7.0" }
 serde = "1.0"
 thiserror = "2"
 base64 = "0.22"
+tempfile = "3.8"
 
 [build-dependencies]
 tauri-plugin = { version = "2.3.1", features = ["build"] }

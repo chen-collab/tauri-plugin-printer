@@ -2,6 +2,7 @@ use serde::de::DeserializeOwned;
 use tauri::{plugin::PluginApi, AppHandle, Runtime};
 
 use crate::models::*;
+use crate::declare::PrintHtmlOptions;
 
 pub fn init<R: Runtime, C: DeserializeOwned>(
   app: &AppHandle<R>,
@@ -18,5 +19,38 @@ impl<R: Runtime> Printer<R> {
     Ok(PingResponse {
       value: payload.value,
     })
+  }
+
+  pub fn get_printers(&self) -> crate::Result<String> {
+    #[cfg(target_os = "windows")]
+    {
+      Ok(crate::windows::get_printers())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+      Err(crate::Error::UnsupportedPlatform)
+    }
+  }
+
+  pub fn get_printer_by_name(&self, name: String) -> crate::Result<String> {
+    #[cfg(target_os = "windows")]
+    {
+      Ok(crate::windows::get_printers_by_name(name))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+      Err(crate::Error::UnsupportedPlatform)
+    }
+  }
+
+  pub fn print_html(&self, options: PrintHtmlOptions) -> crate::Result<String> {
+    #[cfg(target_os = "windows")]
+    {
+      Ok(crate::windows::print_html(options))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+      Err(crate::Error::UnsupportedPlatform)
+    }
   }
 }
