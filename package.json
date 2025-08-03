@@ -1,6 +1,6 @@
 {
   "name": "tauri-plugin-printer-v2",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "author": "chen-collab",
   "description": "Tauri plugin for printer",
   "license": "MIT",

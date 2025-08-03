@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { ping, getPrinters, getPrinterByName, printPdf, printHtml } from 'tauri-plugin-printer-api'
+import { ping, getPrinters, getPrinterByName, printPdf, printHtml } from 'tauri-plugin-printer-v2'
 import { open } from '@tauri-apps/plugin-dialog'
 // import { writeTextFile, BaseDirectory } from '@tauri-apps/api/fs'
 
