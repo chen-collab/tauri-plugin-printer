@@ -5,8 +5,7 @@ use std::{sync::mpsc, io::Write};
 use std::thread;
 use std::fs::{File};
 use std::env;
-use std::path::Path;
-use tempfile::NamedTempFile;
+use std::path::{Path, PathBuf};
 use crate::declare::{PrintOptions, PrintHtmlOptions};
 use crate::{ fsys::remove_file};
 /**
@@ -151,6 +150,17 @@ pub fn print_html(options: PrintHtmlOptions) -> String {
     }
 }
 
+/// 生成唯一的临时文件路径
+fn generate_temp_file_path(extension: &str) -> Result<PathBuf, String> {
+    let temp_dir = env::temp_dir();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("获取时间戳失败: {}", e))?
+        .as_nanos();
+    let filename = format!("tauri_printer_{}_{}.{}", std::process::id(), timestamp, extension);
+    Ok(temp_dir.join(filename))
+}
+
 /// 内部实现函数，使用 Result 进行错误处理
 fn print_html_internal(options: PrintHtmlOptions) -> Result<String, String> {
     // 验证 HTML 内容
@@ -161,21 +171,13 @@ fn print_html_internal(options: PrintHtmlOptions) -> Result<String, String> {
     // 检查 wkhtmltopdf 是否可用
     check_wkhtmltopdf_availability()?;
 
-    // 创建持久化临时文件
-    let pdf_temp_file = NamedTempFile::new()
-        .map_err(|e| format!("创建 PDF 临时文件失败: {}", e))?;
-    let html_temp_file = NamedTempFile::new()
-        .map_err(|e| format!("创建 HTML 临时文件失败: {}", e))?;
-    
-    // 获取文件路径并持久化文件
-    let (html_file, html_path) = html_temp_file.keep()
-        .map_err(|e| format!("持久化 HTML 临时文件失败: {}", e))?;
-    let (pdf_file, pdf_path) = pdf_temp_file.keep()
-        .map_err(|e| format!("持久化 PDF 临时文件失败: {}", e))?;
+    // 生成临时文件路径
+    let html_path = generate_temp_file_path("html")?;
+    let pdf_path = generate_temp_file_path("pdf")?;
     
     println!("html_path: {:?}, pdf_path: {:?}", html_path, pdf_path);
 
-    // 写入 HTML 内容
+    // 写入 HTML 内容到临时文件
     std::fs::write(&html_path, &options.html)
         .map_err(|e| format!("写入 HTML 内容失败: {}", e))?;
 
@@ -185,12 +187,18 @@ fn print_html_internal(options: PrintHtmlOptions) -> Result<String, String> {
     println!("wkhtmltopdf args: {:?}", args);
 
     // 执行 HTML 到 PDF 转换
-    execute_wkhtmltopdf(&args)?;
+    let conversion_result = execute_wkhtmltopdf(&args);
+    
+    // 如果转换失败，清理 HTML 文件并返回错误
+    if let Err(e) = conversion_result {
+        let _ = remove_file(&html_path.to_string_lossy());
+        return Err(e);
+    }
 
     // 验证 PDF 文件是否生成成功
     if !pdf_path.exists() {
         // 清理 HTML 文件
-        let _ = std::fs::remove_file(&html_path);
+        let _ = remove_file(&html_path.to_string_lossy());
         return Err("PDF 文件生成失败".to_string());
     }
     
@@ -208,7 +216,7 @@ fn print_html_internal(options: PrintHtmlOptions) -> Result<String, String> {
     let result = print_pdf(print_options);
 
     // 清理 HTML 临时文件（PDF 文件由 print_pdf 函数根据 remove_after_print 选项处理）
-    let _ = std::fs::remove_file(&html_path);
+    let _ = remove_file(&html_path.to_string_lossy());
     
     Ok(result)
 }
