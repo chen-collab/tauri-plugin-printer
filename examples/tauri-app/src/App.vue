@@ -1,14 +1,13 @@
 <script setup>
 import { ref } from 'vue'
 import { ping, getPrinters, getPrinterByName, printPdf, printHtml } from 'tauri-plugin-printer-api'
+import { open } from '@tauri-apps/plugin-dialog'
 // import { writeTextFile, BaseDirectory } from '@tauri-apps/api/fs'
-
- 
-
 
 const response = ref('')
 const printerName = ref('')
-const pdfFilePath = ref('./assets/平心堂项目报价.pdf')
+const pdfFilePath = ref('')
+const selectedFileName = ref('')
 const printersList = ref([])
 const selectedPrinter = ref('')
 
@@ -95,6 +94,31 @@ const handleSelectPrinter = (printer) => {
   selectedPrinter.value = printer.name
   printerName.value = printer.name
   updateResponse(`已选择打印机: ${printer.name}`)
+}
+
+const handleSelectPdfFile = async () => {
+  try {
+    const selected = await open({
+      multiple: false,
+      filters: [{
+        name: 'PDF文件',
+        extensions: ['pdf']
+      }]
+    })
+    
+    if (selected && typeof selected === 'string') {
+      pdfFilePath.value = selected
+      // 提取文件名
+      const fileName = selected.split('\\').pop() || selected.split('/').pop() || selected
+      selectedFileName.value = fileName
+      updateResponse(`已选择PDF文件: ${fileName}`)
+      updateResponse(`文件路径: ${selected}`)
+    } else {
+      updateResponse('未选择文件')
+    }
+  } catch (error) {
+    updateResponse(`选择文件失败: ${error}`)
+  }
 }
 
 const handlePrintCurrentPage = async () => {
@@ -304,32 +328,42 @@ const handlePrintCurrentPage = async () => {
 
 const handlePrintSpecificPdf = async () => {
   try {
-    updateResponse(`开始打印指定PDF文件: ${pdfFilePath.value}`)
+    // 检查是否选择了PDF文件
+    if (!pdfFilePath.value.trim()) {
+      updateResponse('❌ 请先选择要打印的PDF文件')
+      return
+    }
+    
+    updateResponse(`📄 开始打印PDF文件: ${selectedFileName.value || pdfFilePath.value}`)
     
     // 检查是否设置了打印机
-    if (!printerName.value.trim()) {
-      updateResponse('警告: 未指定打印机，将使用默认打印机')
+    const currentPrinter = selectedPrinter.value || printerName.value.trim()
+    if (!currentPrinter) {
+      updateResponse('⚠️ 警告: 未指定打印机，将使用默认打印机')
+    } else {
+      updateResponse(`🖨️ 使用打印机: ${currentPrinter}`)
     }
     
     // 构建打印选项
     const printId = `pdf_print_${Date.now()}`
     const printOptions = {
-      id: printId, path: pdfFilePath.value, 
-      printer_setting: printerName.value.trim() || 'default',
+      id: printId, 
+      path: pdfFilePath.value, 
+      printer_setting: currentPrinter || 'default',
       remove_after_print: false // 不删除原文件
     }
     
-    updateResponse(`打印配置: ID=${printId}, Path=${pdfFilePath.value}, Options=${JSON.stringify(printOptions, null, 2)}`)
+    updateResponse(`⚙️ 打印配置: ID=${printId}`)
+    updateResponse(`📁 文件路径: ${pdfFilePath.value}`)
+    updateResponse(`🖨️ 打印机设置: ${printOptions.printer_setting}`)
     
     // 调用打印PDF API
     console.log('打印配置:', { id: printId, path: pdfFilePath.value, options: printOptions });
-    const result = await printPdf( printOptions)
-    updateResponse(`PDF打印任务已提交: ${result}`)
-    updateResponse(`文件路径: ${printOptions.path}`)
-    updateResponse(`使用打印机: ${printOptions.printer_setting}`)
+    const result = await printPdf(printOptions)
+    updateResponse(`✅ PDF打印任务已成功提交: ${result}`)
     
   } catch (error) {
-    updateResponse(`打印PDF失败: ${error.message || error}`)
+    updateResponse(`❌ 打印PDF失败: ${error.message || error}`)
   }
 }
 </script>
@@ -337,26 +371,76 @@ const handlePrintSpecificPdf = async () => {
 <template>
   <div class="container">
     <header>
-      <h1>Tauri Plugin Printer Example</h1>
+      <h1>🖨️ Tauri Plugin Printer Example</h1>
       <p>基于 Vue 3 + Vite 的 Tauri 插件演示应用</p>
     </header>
 
-    <main>
-      <div class="demo-section">
-        <div class="button-group">
-          <button @click="handlePing" class="action-button">
-            测试 Ping 功能
-          </button>
-          <button @click="handleGetPrinters" class="action-button">
-            获取打印机列表
-          </button>
-          <button @click="handlePrintCurrentPage" class="action-button print-button">
-            打印当前页面
-          </button>
-          <button @click="handlePrintSpecificPdf" class="action-button pdf-print-button">
-            打印指定PDF文件
-          </button>
+    <main class="desktop-layout">
+      <!-- 左侧控制面板 -->
+      <div class="control-panel">
+        <div class="section-card">
+          <h3>🔧 基础功能</h3>
+          <div class="button-group vertical">
+            <button @click="handlePing" class="action-button">
+              🏓 测试 Ping 功能
+            </button>
+            <button @click="handleGetPrinters" class="action-button">
+              📋 获取打印机列表
+            </button>
+          </div>
         </div>
+
+        <div class="section-card">
+          <h3>🖨️ 打印功能</h3>
+          <div class="button-group vertical">
+            <button @click="handlePrintCurrentPage" class="action-button print-button">
+              📄 打印当前页面
+            </button>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <h3>📁 PDF 文件打印</h3>
+          <div class="pdf-section">
+            <button @click="handleSelectPdfFile" class="action-button file-select-button">
+              📂 选择 PDF 文件
+            </button>
+            <div v-if="selectedFileName" class="selected-file-info">
+              <div class="file-icon">📄</div>
+              <div class="file-details">
+                <div class="file-name">{{ selectedFileName }}</div>
+                <div class="file-path">{{ pdfFilePath }}</div>
+              </div>
+            </div>
+            <button 
+              @click="handlePrintSpecificPdf" 
+              class="action-button pdf-print-button"
+              :disabled="!pdfFilePath"
+            >
+              🖨️ 打印选中的PDF
+            </button>
+          </div>
+        </div>
+
+        <div class="section-card">
+          <h3>🔍 打印机查询</h3>
+          <div class="search-group">
+            <input 
+              v-model="printerName" 
+              type="text" 
+              placeholder="请输入打印机名称" 
+              class="printer-input"
+              @keyup.enter="handleGetPrinterByName"
+            />
+            <button @click="handleGetPrinterByName" class="search-button">
+              🔍 查询
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧信息面板 -->
+      <div class="info-panel">
         
         <div class="printer-list-section" v-if="printersList.length > 0">
           <h3>📋 可用打印机列表：</h3>
@@ -411,24 +495,8 @@ const handlePrintSpecificPdf = async () => {
           </div>
         </div>
 
-        <div class="printer-search-section">
-          <h3>根据名称获取打印机信息：</h3>
-          <div class="search-group">
-            <input 
-              v-model="printerName" 
-              type="text" 
-              placeholder="请输入打印机名称" 
-              class="printer-input"
-              @keyup.enter="handleGetPrinterByName"
-            />
-            <button @click="handleGetPrinterByName" class="search-button">
-              获取打印机信息
-            </button>
-          </div>
-        </div>
-        
         <div class="response-area">
-          <h3>响应日志：</h3>
+          <h3>📋 响应日志</h3>
           <pre>{{ response || '点击按钮测试插件功能...' }}</pre>
         </div>
       </div>
@@ -438,7 +506,7 @@ const handlePrintSpecificPdf = async () => {
 
 <style scoped>
 .container {
-  max-width: 800px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 2rem;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -446,12 +514,13 @@ const handlePrintSpecificPdf = async () => {
 
 header {
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
 }
 
 header h1 {
   color: #2c3e50;
   margin-bottom: 0.5rem;
+  font-size: 2.5rem;
 }
 
 header p {
@@ -459,45 +528,150 @@ header p {
   font-size: 1.1rem;
 }
 
-.demo-section {
-  background: #f8f9fa;
+/* 桌面布局 */
+.desktop-layout {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 2rem;
+  min-height: 80vh;
+}
+
+/* 控制面板 */
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.section-card {
+  background: white;
   border-radius: 12px;
-  padding: 2rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e1e8ed;
+}
+
+.section-card h3 {
+  margin: 0 0 1rem 0;
+  color: #2c3e50;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* 信息面板 */
+.info-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 .button-group {
   display: flex;
   gap: 1rem;
-  margin-bottom: 2rem;
   flex-wrap: wrap;
+}
+
+.button-group.vertical {
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* PDF 文件选择区域 */
+.pdf-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.selected-file-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 2px dashed #dee2e6;
+}
+
+.file-icon {
+  font-size: 2rem;
+}
+
+.file-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 0.25rem;
+  word-break: break-word;
+}
+
+.file-path {
+  font-size: 0.85rem;
+  color: #6c757d;
+  word-break: break-all;
+  font-family: 'Courier New', monospace;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .desktop-layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .container {
+    padding: 1rem;
+  }
+  
+  header h1 {
+    font-size: 2rem;
+  }
 }
 
 .action-button {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  padding: 12px 24px;
+  padding: 12px 20px;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  flex: 1;
-  min-width: 150px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
-.action-button:hover {
+.action-button:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
 }
 
-.action-button:nth-child(2) {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+.action-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
-.action-button:nth-child(2):hover {
-  box-shadow: 0 8px 25px rgba(245, 87, 108, 0.3);
+.action-button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.file-select-button {
+  background: linear-gradient(135deg, #17a2b8 0%, #138496 100%) !important;
+}
+
+.file-select-button:hover:not(:disabled) {
+  box-shadow: 0 8px 25px rgba(23, 162, 184, 0.3) !important;
 }
 
 .print-button {
@@ -517,17 +691,18 @@ header p {
 }
 
 .printer-list-section {
-  margin: 2rem 0;
-  padding: 1.5rem;
   background: white;
-  border-radius: 8px;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid #e1e8ed;
 }
 
 .printer-list-section h3 {
-  margin-top: 0;
-  margin-bottom: 1rem;
+  margin: 0 0 1rem 0;
   color: #2c3e50;
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
 .current-printer {
@@ -660,23 +835,9 @@ header p {
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
-.printer-search-section {
-  margin: 2rem 0;
-  padding: 1.5rem;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e1e8ed;
-}
-
-.printer-search-section h3 {
-  margin-top: 0;
-  margin-bottom: 1rem;
-  color: #2c3e50;
-}
-
 .search-group {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   align-items: center;
   flex-wrap: wrap;
 }
@@ -684,10 +845,10 @@ header p {
 .printer-input {
   flex: 1;
   min-width: 200px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border: 2px solid #e1e8ed;
-  border-radius: 8px;
-  font-size: 1rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
   transition: border-color 0.3s ease;
 }
 
@@ -701,9 +862,9 @@ header p {
   background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
   color: white;
   border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-size: 1rem;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -711,75 +872,42 @@ header p {
 }
 
 .search-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(40, 167, 69, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(40, 167, 69, 0.3);
 }
 
-.pdf-file-section {
-  margin: 2rem 0;
-  padding: 1.5rem;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e1e8ed;
-}
 
-.pdf-file-section h3 {
-  margin-top: 0;
-  margin-bottom: 1rem;
-  color: #2c3e50;
-}
-
-.pdf-button {
-  background: linear-gradient(135deg, #ffa726 0%, #ff7043 100%);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  white-space: nowrap;
-}
-
-.pdf-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(255, 167, 38, 0.3);
-}
-
-.file-info {
-  margin-top: 1rem;
-  padding: 0.5rem;
-  background: #f8f9fa;
-  border-radius: 4px;
-  color: #6c757d;
-  font-size: 0.9rem;
-  word-break: break-all;
-}
 
 .response-area {
   background: white;
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 1.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid #e1e8ed;
+  flex: 1;
 }
 
 .response-area h3 {
-  margin-top: 0;
+  margin: 0 0 1rem 0;
   color: #2c3e50;
-  margin-bottom: 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
 }
 
 .response-area pre {
-  background: #f1f3f4;
-  padding: 1rem;
-  border-radius: 6px;
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 8px;
   border-left: 4px solid #667eea;
-  font-family: 'Courier New', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   white-space: pre-wrap;
   word-wrap: break-word;
   color: #2c3e50;
   margin: 0;
-  min-height: 100px;
+  min-height: 300px;
+  max-height: 500px;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 </style>
