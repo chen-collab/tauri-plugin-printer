@@ -19,6 +19,7 @@
     "printer:allow-resume-job",
     "printer:allow-restart-job",
     "printer:allow-pause-job",
-    "printer:allow-remove-job"
+    "printer:allow-remove-job",
+    "dialog:default"
   ]
 }
