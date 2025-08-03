@@ -230,7 +230,7 @@ const handlePrintCurrentPage = async () => {
       copies: 1
     }
     
-    updateResponse(`⚙️ 打印配置详情:\n${JSON.stringify(printOptions, null, 2)}`)
+    // updateResponse(`⚙️ 打印配置详情:\n${JSON.stringify(printOptions, null, 2)}`)
     updateResponse(`🚀 正在提交打印任务...`)
     
     const result = await printHtml(printOptions)

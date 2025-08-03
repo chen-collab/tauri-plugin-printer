@@ -161,29 +161,40 @@ fn print_html_internal(options: PrintHtmlOptions) -> Result<String, String> {
     // 检查 wkhtmltopdf 是否可用
     check_wkhtmltopdf_availability()?;
 
-    // 创建临时文件
+    // 创建持久化临时文件
     let pdf_temp_file = NamedTempFile::new()
         .map_err(|e| format!("创建 PDF 临时文件失败: {}", e))?;
     let html_temp_file = NamedTempFile::new()
         .map_err(|e| format!("创建 HTML 临时文件失败: {}", e))?;
-
-    let pdf_path = pdf_temp_file.path();
-    let html_path = html_temp_file.path();
+    
+    // 获取文件路径并持久化文件
+    let (html_file, html_path) = html_temp_file.keep()
+        .map_err(|e| format!("持久化 HTML 临时文件失败: {}", e))?;
+    let (pdf_file, pdf_path) = pdf_temp_file.keep()
+        .map_err(|e| format!("持久化 PDF 临时文件失败: {}", e))?;
+    
+    println!("html_path: {:?}, pdf_path: {:?}", html_path, pdf_path);
 
     // 写入 HTML 内容
-    std::fs::write(html_path, &options.html)
+    std::fs::write(&html_path, &options.html)
         .map_err(|e| format!("写入 HTML 内容失败: {}", e))?;
 
     // 构建 wkhtmltopdf 命令参数
-    let args = build_wkhtmltopdf_args(&options, html_path, pdf_path)?;
+    let args = build_wkhtmltopdf_args(&options, &html_path, &pdf_path)?;
+
+    println!("wkhtmltopdf args: {:?}", args);
 
     // 执行 HTML 到 PDF 转换
     execute_wkhtmltopdf(&args)?;
 
     // 验证 PDF 文件是否生成成功
     if !pdf_path.exists() {
+        // 清理 HTML 文件
+        let _ = std::fs::remove_file(&html_path);
         return Err("PDF 文件生成失败".to_string());
     }
+    
+    println!("PDF 文件生成成功: {:?}", pdf_path);
 
     // 创建打印选项并执行打印
     let print_options = PrintOptions {
@@ -196,7 +207,9 @@ fn print_html_internal(options: PrintHtmlOptions) -> Result<String, String> {
     // 执行打印
     let result = print_pdf(print_options);
 
-    // 临时文件会在 NamedTempFile 被 drop 时自动清理
+    // 清理 HTML 临时文件（PDF 文件由 print_pdf 函数根据 remove_after_print 选项处理）
+    let _ = std::fs::remove_file(&html_path);
+    
     Ok(result)
 }
 
@@ -216,14 +229,16 @@ fn build_wkhtmltopdf_args(
     pdf_path: &Path,
 ) -> Result<Vec<String>, String> {
     let mut args = vec![
-        "--quiet".to_string(),
         "--encoding".to_string(),
         "UTF-8".to_string(),
         "--enable-local-file-access".to_string(),
-        "--enable-smart-shrinking".to_string(),
-        "--print-media-type".to_string(),
         "--disable-smart-shrinking".to_string(), // 禁用智能缩放以获得更好的打印质量
+        "--print-media-type".to_string(),
         "--no-pdf-compression".to_string(),      // 禁用 PDF 压缩以提高质量
+        "--load-error-handling".to_string(),
+        "ignore".to_string(),                    // 忽略加载错误
+        "--load-media-error-handling".to_string(),
+        "ignore".to_string(),                    // 忽略媒体加载错误
     ];
 
     // 设置默认边距
