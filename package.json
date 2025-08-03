@@ -1,8 +1,18 @@
 {
-  "name": "tauri-plugin-printer-api",
-  "version": "0.1.0",
-  "author": "You",
-  "description": "",
+  "name": "tauri-plugin-printer-v2",
+  "version": "0.2.0",
+  "author": "chen-collab",
+  "description": "Tauri plugin for printer",
+  "license": "MIT",
+  "keywords": [
+    "tauri",
+    "plugin",
+    "printer"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chen-collab/tauri-plugin-printer"
+  },
   "type": "module",
   "types": "./dist-js/index.d.ts",
   "main": "./dist-js/index.cjs",

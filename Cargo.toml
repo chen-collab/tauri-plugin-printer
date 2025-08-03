@@ -1,12 +1,17 @@
 [package]
-name = "tauri-plugin-printer"
-version = "0.1.0"
-authors = [ "You" ]
-description = ""
+name = "tauri-plugin-printer-v2"
+version = "0.2.0"
+authors = [ "chen-collab" ]
+description = "Tauri plugin for printing"
 edition = "2021"
 rust-version = "1.77.2"
-exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
+exclude = ["/examples", "/dist-js",  "/node_modules"]
 links = "tauri-plugin-printer"
+license = "MIT"
+repository = "https://github.com/chen-collab/tauri-plugin-printer"
+keywords = ["tauri", "plugin", "printer"]
+categories = ["api-bindings", "development-tools"]
+email = "18668070425@163.com"
 
 [dependencies]
 tauri = { version = "2.7.0" }

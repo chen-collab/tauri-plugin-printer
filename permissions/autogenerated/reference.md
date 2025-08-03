@@ -28,7 +28,7 @@ Default permissions for the plugin
 <tr>
 <td>
 
-`printer:allow-create-temp-file`
+`printer-v2:allow-create-temp-file`
 
 </td>
 <td>
@@ -41,7 +41,7 @@ Enables the create_temp_file command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-create-temp-file`
+`printer-v2:deny-create-temp-file`
 
 </td>
 <td>
@@ -54,7 +54,7 @@ Denies the create_temp_file command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-custom-get-printers-by-name`
+`printer-v2:allow-custom-get-printers-by-name`
 
 </td>
 <td>
@@ -67,7 +67,7 @@ Enables the custom_get_printers_by_name command without any pre-configured scope
 <tr>
 <td>
 
-`printer:deny-custom-get-printers-by-name`
+`printer-v2:deny-custom-get-printers-by-name`
 
 </td>
 <td>
@@ -80,7 +80,7 @@ Denies the custom_get_printers_by_name command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-custom-print-pdf`
+`printer-v2:allow-custom-print-pdf`
 
 </td>
 <td>
@@ -93,7 +93,7 @@ Enables the custom_print_pdf command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-custom-print-pdf`
+`printer-v2:deny-custom-print-pdf`
 
 </td>
 <td>
@@ -106,7 +106,7 @@ Denies the custom_print_pdf command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-get-jobs`
+`printer-v2:allow-get-jobs`
 
 </td>
 <td>
@@ -119,7 +119,7 @@ Enables the get_jobs command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-get-jobs`
+`printer-v2:deny-get-jobs`
 
 </td>
 <td>
@@ -132,7 +132,7 @@ Denies the get_jobs command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-get-jobs-by-id`
+`printer-v2:allow-get-jobs-by-id`
 
 </td>
 <td>
@@ -145,7 +145,7 @@ Enables the get_jobs_by_id command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-get-jobs-by-id`
+`printer-v2:deny-get-jobs-by-id`
 
 </td>
 <td>
@@ -158,7 +158,7 @@ Denies the get_jobs_by_id command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-get-printers`
+`printer-v2:allow-get-printers`
 
 </td>
 <td>
@@ -171,7 +171,7 @@ Enables the get_printers command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-get-printers`
+`printer-v2:deny-get-printers`
 
 </td>
 <td>
@@ -184,7 +184,7 @@ Denies the get_printers command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-get-printers-by-name`
+`printer-v2:allow-get-printers-by-name`
 
 </td>
 <td>
@@ -197,7 +197,7 @@ Enables the get_printers_by_name command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-get-printers-by-name`
+`printer-v2:deny-get-printers-by-name`
 
 </td>
 <td>
@@ -210,7 +210,7 @@ Denies the get_printers_by_name command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-pause-job`
+`printer-v2:allow-pause-job`
 
 </td>
 <td>
@@ -223,7 +223,7 @@ Enables the pause_job command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-pause-job`
+`printer-v2:deny-pause-job`
 
 </td>
 <td>
@@ -236,7 +236,7 @@ Denies the pause_job command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-ping`
+`printer-v2:allow-ping`
 
 </td>
 <td>
@@ -249,7 +249,7 @@ Enables the ping command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-ping`
+`printer-v2:deny-ping`
 
 </td>
 <td>
@@ -262,7 +262,7 @@ Denies the ping command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-print-html`
+`printer-v2:allow-print-html`
 
 </td>
 <td>
@@ -275,7 +275,7 @@ Enables the print_html command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-print-html`
+`printer-v2:deny-print-html`
 
 </td>
 <td>
@@ -288,7 +288,7 @@ Denies the print_html command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-print-pdf`
+`printer-v2:allow-print-pdf`
 
 </td>
 <td>
@@ -301,7 +301,7 @@ Enables the print_pdf command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-print-pdf`
+`printer-v2:deny-print-pdf`
 
 </td>
 <td>
@@ -314,7 +314,7 @@ Denies the print_pdf command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-remove-job`
+`printer-v2:allow-remove-job`
 
 </td>
 <td>
@@ -327,7 +327,7 @@ Enables the remove_job command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-remove-job`
+`printer-v2:deny-remove-job`
 
 </td>
 <td>
@@ -340,7 +340,7 @@ Denies the remove_job command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-remove-temp-file`
+`printer-v2:allow-remove-temp-file`
 
 </td>
 <td>
@@ -353,7 +353,7 @@ Enables the remove_temp_file command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-remove-temp-file`
+`printer-v2:deny-remove-temp-file`
 
 </td>
 <td>
@@ -366,7 +366,7 @@ Denies the remove_temp_file command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-restart-job`
+`printer-v2:allow-restart-job`
 
 </td>
 <td>
@@ -379,7 +379,7 @@ Enables the restart_job command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-restart-job`
+`printer-v2:deny-restart-job`
 
 </td>
 <td>
@@ -392,7 +392,7 @@ Denies the restart_job command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:allow-resume-job`
+`printer-v2:allow-resume-job`
 
 </td>
 <td>
@@ -405,7 +405,7 @@ Enables the resume_job command without any pre-configured scope.
 <tr>
 <td>
 
-`printer:deny-resume-job`
+`printer-v2:deny-resume-job`
 
 </td>
 <td>
