@@ -18,7 +18,9 @@ const printSettings = ref({
   copies: 1, // 打印份数
   quality: 300, // DPI
   grayscale: false, // 是否灰度打印
-  duplex: 'None' // None, Horizontal, Vertical
+  duplex: 'None', // None, Horizontal, Vertical
+  customWidth: 210, // 自定义纸张宽度 (mm)
+  customHeight: 297 // 自定义纸张高度 (mm)
 })
 
 const updateResponse = (returnValue) => {
@@ -270,7 +272,7 @@ const handlePrintCurrentPage = async () => {
         <div class="info-box">
             <div class="info-title">⚙️ 打印配置信息</div>
             <p><strong>打印机:</strong> ${currentPrinter || '默认打印机'}</p>
-            <p><strong>页面大小:</strong> ${printSettings.value.paperSize}</p>
+            <p><strong>页面大小:</strong> ${printSettings.value.paperSize === 'Custom' ? `自定义 ${printSettings.value.customWidth}×${printSettings.value.customHeight}mm` : printSettings.value.paperSize}</p>
             <p><strong>方向:</strong> ${printSettings.value.orientation === 'Portrait' ? '纵向 (Portrait)' : '横向 (Landscape)'}</p>
             <p><strong>打印份数:</strong> ${printSettings.value.copies} 份</p>
             <p><strong>打印质量:</strong> ${printSettings.value.quality} DPI</p>
@@ -310,8 +312,12 @@ const handlePrintCurrentPage = async () => {
           settings.push('portrait');
         }
         
-        // 添加纸张大小
-        settings.push(`paper=${printSettings.value.paperSize}`);
+        // 添加纸张大小或自定义尺寸
+        if (printSettings.value.paperSize === 'Custom') {
+          // 自定义尺寸不需要在 print_settings 中设置，通过 page_width 和 page_height 参数传递
+        } else {
+          settings.push(`paper=${printSettings.value.paperSize}`);
+        }
         
         // 添加缩放设置
         settings.push('fit');
@@ -331,7 +337,9 @@ const handlePrintCurrentPage = async () => {
         return settings.join(',');
       })(),
       remove_after_print: true,
-      page_size: printSettings.value.paperSize,
+      page_size: printSettings.value.paperSize === 'Custom' ? undefined : printSettings.value.paperSize,
+      page_width: printSettings.value.paperSize === 'Custom' ? printSettings.value.customWidth : undefined,
+      page_height: printSettings.value.paperSize === 'Custom' ? printSettings.value.customHeight : undefined,
       orientation: printSettings.value.orientation,
       margin: {
         top: 10.0,
@@ -402,8 +410,13 @@ const handlePrintSpecificPdf = async () => {
           settings.push('portrait');
         }
         
-        // 添加纸张大小
-        settings.push(`paper=${printSettings.value.paperSize}`);
+        // 添加纸张大小或自定义尺寸
+        if (printSettings.value.paperSize === 'Custom') {
+          // 自定义尺寸通过 page_width 和 page_height 参数传递
+          settings.push(`paper=${printSettings.value.customWidth}x${printSettings.value.customHeight}mm`);
+        } else {
+          settings.push(`paper=${printSettings.value.paperSize}`);
+        }
         
         // 添加缩放设置
         settings.push('fit');
@@ -490,7 +503,47 @@ const handlePrintSpecificPdf = async () => {
                 <option value="Letter">📋 Letter (216×279mm)</option>
                 <option value="Legal">📋 Legal (216×356mm)</option>
                 <option value="A5">📋 A5 (148×210mm)</option>
+                <option value="Custom">📐 自定义尺寸</option>
               </select>
+            </div>
+            
+            <!-- 自定义纸张尺寸控件 -->
+            <div v-if="printSettings.paperSize === 'Custom'" class="setting-group custom-size-group">
+              <label class="setting-label">📐 自定义尺寸 (毫米)</label>
+              <div class="custom-size-controls">
+                <div class="size-input-group">
+                  <label class="size-label">宽度:</label>
+                  <input 
+                    v-model.number="printSettings.customWidth" 
+                    type="number" 
+                    min="50" 
+                    max="1000" 
+                    step="1"
+                    class="size-input" 
+                    placeholder="210"
+                  />
+                  <span class="size-unit">mm</span>
+                </div>
+                <div class="size-input-group">
+                  <label class="size-label">高度:</label>
+                  <input 
+                    v-model.number="printSettings.customHeight" 
+                    type="number" 
+                    min="50" 
+                    max="1000" 
+                    step="1"
+                    class="size-input" 
+                    placeholder="297"
+                  />
+                  <span class="size-unit">mm</span>
+                </div>
+              </div>
+              <div class="size-presets">
+                <button @click="printSettings.customWidth = 210; printSettings.customHeight = 297" class="preset-btn">A4</button>
+                <button @click="printSettings.customWidth = 297; printSettings.customHeight = 420" class="preset-btn">A3</button>
+                <button @click="printSettings.customWidth = 216; printSettings.customHeight = 279" class="preset-btn">Letter</button>
+                <button @click="printSettings.customWidth = 148; printSettings.customHeight = 210" class="preset-btn">A5</button>
+              </div>
             </div>
             
             <div class="setting-group">
@@ -522,7 +575,12 @@ const handlePrintSpecificPdf = async () => {
             <div class="current-settings">
               <div class="settings-preview">
                 <span class="preview-label">当前设置：</span>
-                <span class="preview-value">{{ printSettings.orientation === 'Portrait' ? '纵向' : '横向' }} | {{ printSettings.paperSize }} | {{ printSettings.copies }}份 | {{ printSettings.quality }}DPI{{ printSettings.grayscale ? ' | 灰度' : '' }}</span>
+                <span class="preview-value">
+                  {{ printSettings.orientation === 'Portrait' ? '纵向' : '横向' }} | 
+                  {{ printSettings.paperSize === 'Custom' ? `自定义 ${printSettings.customWidth}×${printSettings.customHeight}mm` : printSettings.paperSize }} | 
+                  {{ printSettings.copies }}份 | 
+                  {{ printSettings.quality }}DPI{{ printSettings.grayscale ? ' | 灰度' : '' }}
+                </span>
               </div>
             </div>
           </div>
@@ -1025,6 +1083,82 @@ header p {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* 自定义纸张尺寸样式 */
+.custom-size-group {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 2px dashed #dee2e6;
+  margin-top: 0.5rem;
+}
+
+.custom-size-controls {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.size-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 120px;
+}
+
+.size-label {
+  font-weight: 500;
+  color: #495057;
+  font-size: 0.85rem;
+  min-width: 40px;
+}
+
+.size-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  text-align: center;
+  min-width: 60px;
+}
+
+.size-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+}
+
+.size-unit {
+  font-size: 0.85rem;
+  color: #6c757d;
+  font-weight: 500;
+}
+
+.size-presets {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.preset-btn {
+  background: #e9ecef;
+  border: 1px solid #ced4da;
+  color: #495057;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.preset-btn:hover {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
 }
 
 .setting-select {

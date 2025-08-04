@@ -57,6 +57,8 @@ export interface PrintHtmlOptions {
   quality?: number;
   grayscale?: boolean;
   copies?: number;
+  page_width?: number;  // 自定义页面宽度 (mm)
+  page_height?: number; // 自定义页面高度 (mm)
 }
 
 export async function printHtml(options: PrintHtmlOptions): Promise<string> {

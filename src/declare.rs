@@ -25,6 +25,8 @@ pub struct PrintHtmlOptions {
     pub quality: Option<u32>,  // 打印质量
     pub grayscale: Option<bool>,  // 灰度打印
     pub copies: Option<u32>,  // 打印份数
+    pub page_width: Option<f64>,  // 自定义页面宽度 (mm)
+    pub page_height: Option<f64>,  // 自定义页面高度 (mm)
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -143,6 +143,7 @@ pub fn print_pdf (options: PrintOptions) -> String {
  * - 更好的临时文件清理机制
  * - 增强的 wkhtmltopdf 参数配置
  * - 支持更多打印选项和边距单位
+ * - 支持自定义纸张尺寸 (--page-width 和 --page-height，单位mm)
  */
 pub fn print_html(options: PrintHtmlOptions) -> String {
     // 使用 Result 类型进行更好的错误处理
@@ -268,10 +269,20 @@ fn build_wkhtmltopdf_args(
         default_margin.to_string(),
     ]);
 
-    // 设置页面大小
-    if let Some(ref page_size) = options.page_size {
+    // 设置页面大小 - 优先使用自定义尺寸
+    if let (Some(width), Some(height)) = (options.page_width, options.page_height) {
+        // 使用自定义纸张尺寸 (单位: mm)
+        args.extend([
+            "--page-width".to_string(), 
+            format!("{}mm", width),
+            "--page-height".to_string(), 
+            format!("{}mm", height)
+        ]);
+    } else if let Some(ref page_size) = options.page_size {
+        // 使用预定义纸张大小
         args.extend(["--page-size".to_string(), page_size.clone()]);
     } else {
+        // 默认使用 A4
         args.extend(["--page-size".to_string(), "A4".to_string()]);
     }
 
