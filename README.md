@@ -201,6 +201,15 @@ const htmlPrintResult = await printHtml({
   printer: 'Microsoft Print to PDF'
 });
 
+// 4.1 使用自定义纸张大小打印 HTML
+const customSizeHtmlResult = await printHtml({
+  html: '<h1>自定义尺寸</h1><p>使用 200mm x 300mm 的自定义纸张</p>',
+  printer: 'Microsoft Print to PDF',
+  page_width: 200,  // 宽度 200mm
+  page_height: 300, // 高度 300mm
+  orientation: 'portrait'
+});
+
 // 5. 获取打印任务
 const jobs = await getJobs('Microsoft Print to PDF');
 
@@ -358,11 +367,19 @@ setInterval(monitorPrinters, 30000);
 - `subset`: 页面子集（可选）
 
 ### `printHtml(options: HtmlPrintOptions): Promise<string>`
-打印 HTML 内容。
+打印 HTML 内容，支持自定义纸张大小。
 
 **HtmlPrintOptions 参数：**
 - `html`: HTML 内容字符串
 - `printer`: 打印机名称
+- `page_width`: 自定义页面宽度（毫米，可选）
+- `page_height`: 自定义页面高度（毫米，可选）
+- `page_size`: 预定义纸张大小（如 A4、A3、Letter 等，可选）
+- `orientation`: 页面方向（portrait/landscape，可选）
+- `margin`: 页边距设置（可选）
+- `quality`: 打印质量（可选）
+- `grayscale`: 是否灰度打印（可选）
+- `copies`: 打印份数（可选）
 
 ### 打印任务管理
 
@@ -680,7 +697,7 @@ MIT License
 ## 📝 更新日志
 
 ### v0.2.0 (最新)
-- ✨ **新增 HTML 打印功能** - 支持直接打印 HTML 内容
+- ✨ **新增 HTML 打印功能** - 支持直接打印 HTML 内容，包括自定义纸张大小（page_width/page_height）
 - 🔧 **改进错误处理** - 更详细的错误信息和调试支持
 - 📚 **完善文档** - 添加详细的使用示例和故障排除指南
 - ⚡ **性能优化** - 改进大文件打印和内存管理

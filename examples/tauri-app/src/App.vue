@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue'
-import { ping, getPrinters, getPrinterByName, printPdf, printHtml } from 'tauri-plugin-printer-v2'
+import { ping, getPrinters, getPrinterByName, printPdf, printHtml, printPdfFromUrl } from 'tauri-plugin-printer-v2'
 import { open } from '@tauri-apps/plugin-dialog'
 // import { writeTextFile, BaseDirectory } from '@tauri-apps/api/fs'
 
@@ -8,6 +8,8 @@ const response = ref('')
 const printerName = ref('')
 const pdfFilePath = ref('')
 const selectedFileName = ref('')
+const pdfUrl = ref('')
+const isDownloading = ref(false)
 const printersList = ref([])
 const selectedPrinter = ref('')
 
@@ -130,6 +132,206 @@ const handleSelectPdfFile = async () => {
     }
   } catch (error) {
     updateResponse(`选择文件失败: ${error}`)
+  }
+}
+
+const handleDownloadPdfFromUrl = async () => {
+  if (!pdfUrl.value.trim()) {
+    updateResponse('❌ 请输入有效的PDF链接')
+    return
+  }
+  
+  try {
+    isDownloading.value = true
+    updateResponse(`🌐 开始下载PDF: ${pdfUrl.value}`)
+    
+    // 验证URL格式
+    const url = new URL(pdfUrl.value)
+    if (!url.protocol.startsWith('http')) {
+      throw new Error('请输入有效的HTTP/HTTPS链接')
+    }
+    
+    // 使用fetch下载PDF
+    const response = await fetch(pdfUrl.value)
+    if (!response.ok) {
+      throw new Error(`下载失败: ${response.status} ${response.statusText}`)
+    }
+    
+    // 检查内容类型
+    const contentType = response.headers.get('content-type')
+    if (contentType && !contentType.includes('application/pdf')) {
+      updateResponse(`⚠️ 警告: 文件类型可能不是PDF (${contentType})`)
+    }
+    
+    // 获取文件内容
+    const arrayBuffer = await response.arrayBuffer()
+    const uint8Array = new Uint8Array(arrayBuffer)
+    
+    // 生成临时文件名
+    const timestamp = Date.now()
+    const fileName = `downloaded_pdf_${timestamp}.pdf`
+    
+    // 使用Tauri的文件系统API保存文件
+    try {
+      const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
+      const { appDataDir } = await import('@tauri-apps/api/path')
+      
+      // 确保temp目录存在
+      const appDataPath = await appDataDir()
+      const tempDir = `${appDataPath}temp`
+      const fullPath = `${tempDir}/${fileName}`
+      
+      // 创建目录（如果不存在）
+      try {
+        const { mkdir } = await import('@tauri-apps/plugin-fs')
+        await mkdir('temp', { baseDir: BaseDirectory.AppData, recursive: true })
+      } catch (mkdirError) {
+        // 目录可能已存在，忽略错误
+      }
+      
+      // 写入文件
+      await writeFile(`temp/${fileName}`, uint8Array, { baseDir: BaseDirectory.AppData })
+      
+      pdfFilePath.value = fullPath
+       selectedFileName.value = fileName
+       
+       updateResponse(`✅ PDF下载成功: ${fileName}`)
+       updateResponse(`📁 保存路径: ${fullPath}`)
+       updateResponse(`📊 文件大小: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`)
+     } catch (fsError) {
+       // 如果Tauri文件系统API不可用，使用浏览器API作为备选
+       updateResponse('⚠️ 使用浏览器下载方式...')
+       
+       // 创建blob和下载链接
+       const blob = new Blob([uint8Array], { type: 'application/pdf' })
+       const downloadUrl = URL.createObjectURL(blob)
+       
+       // 创建临时下载链接
+       const a = document.createElement('a')
+       a.href = downloadUrl
+       a.download = fileName
+       document.body.appendChild(a)
+       a.click()
+       document.body.removeChild(a)
+       URL.revokeObjectURL(downloadUrl)
+       
+       // 设置一个临时路径标识
+       pdfFilePath.value = `browser_download:${fileName}`
+       selectedFileName.value = fileName
+       
+       updateResponse('📥 文件已通过浏览器下载，请手动选择下载的文件进行打印')
+       updateResponse(`📊 文件大小: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)} MB`)
+       return
+     }
+    
+  } catch (error) {
+    updateResponse(`❌ 下载PDF失败: ${error.message || error}`)
+    updateResponse(`💡 请检查: 1) URL是否正确 2) 网络连接是否正常 3) 文件是否为PDF格式`)
+  } finally {
+    isDownloading.value = false
+  }
+}
+
+const handlePrintPdfFromUrl = async () => {
+  if (!pdfUrl.value.trim()) {
+    updateResponse('❌ 请输入有效的PDF链接')
+    return
+  }
+  
+  const currentPrinter = selectedPrinter.value || printerName.value.trim()
+  if (!currentPrinter) {
+    updateResponse('❌ 请先选择打印机')
+    return
+  }
+  
+  try {
+    updateResponse(`🔄 准备从链接打印PDF: ${pdfUrl.value}`)
+    updateResponse(`📋 使用打印机: ${currentPrinter}`)
+    
+    // 构建打印设置字符串（与PDF文件打印保持一致）
+    const printSettingsStr = (() => {
+      const settings = [];
+      
+      // 添加打印方向
+      if (printSettings.value.orientation === 'Landscape') {
+        settings.push('landscape');
+      } else {
+        settings.push('portrait');
+      }
+      
+      // 添加纸张大小或自定义尺寸
+      if (printSettings.value.paperSize === 'Custom') {
+        // 自定义尺寸
+        settings.push(`paper=${printSettings.value.customWidth}x${printSettings.value.customHeight}mm`);
+      } else {
+        settings.push(`paper=${printSettings.value.paperSize}`);
+      }
+      
+      // 添加缩放设置
+      settings.push('fit');
+      
+      // 添加颜色设置
+      if (printSettings.value.grayscale) {
+        settings.push('monochrome');
+      } else {
+        settings.push('color');
+      }
+      
+      // 添加打印份数（如果大于1）
+      if (printSettings.value.copies > 1) {
+        settings.push(`${printSettings.value.copies}x`);
+      }
+      
+      return settings.join(',');
+    })();
+    
+    updateResponse(`⚙️ 打印设置: ${printSettingsStr}`);
+    
+    // 调用新的printPdfFromUrl接口
+     const result = await printPdfFromUrl({
+       id: `pdf_url_print_${Date.now()}`,
+       url: pdfUrl.value,
+       printer: currentPrinter,
+       print_settings: printSettingsStr,
+       remove_after_print: true, // 打印后删除临时文件
+       timeout_seconds: 30, // 30秒下载超时
+       temp_dir: undefined // 使用默认临时目录
+     })
+    
+    updateResponse(`✅ PDF链接打印结果: ${result}`)
+    
+  } catch (error) {
+    updateResponse(`❌ 从链接打印PDF失败: ${error.message || error}`)
+  }
+}
+
+// 保留原有的下载功能作为备用
+const handlePrintPdfFromUrlLegacy = async () => {
+  if (!pdfUrl.value.trim()) {
+    updateResponse('❌ 请输入有效的PDF链接')
+    return
+  }
+  
+  try {
+    updateResponse(`🔄 准备从链接打印PDF: ${pdfUrl.value}`)
+    
+    // 先下载PDF
+    await handleDownloadPdfFromUrl()
+    
+    // 如果下载成功，则打印
+    if (pdfFilePath.value) {
+      // 检查是否是浏览器下载的文件
+      if (pdfFilePath.value.startsWith('browser_download:')) {
+        updateResponse('⚠️ 检测到浏览器下载的文件，请使用"选择本地文件"功能手动选择下载的PDF文件进行打印')
+        return
+      }
+      
+      updateResponse(`🖨️ 开始打印下载的PDF文件...`)
+      await handlePrintSpecificPdf()
+    }
+    
+  } catch (error) {
+    updateResponse(`❌ 从链接打印PDF失败: ${error.message || error}`)
   }
 }
 
@@ -589,9 +791,51 @@ const handlePrintSpecificPdf = async () => {
         <div class="section-card">
           <h3>📁 PDF 文件打印</h3>
           <div class="pdf-section">
-            <button @click="handleSelectPdfFile" class="action-button file-select-button">
-              📂 选择 PDF 文件
-            </button>
+            <!-- 本地文件选择 -->
+            <div class="pdf-option">
+              <h4>📂 本地文件</h4>
+              <button @click="handleSelectPdfFile" class="action-button file-select-button">
+                📂 选择 PDF 文件
+              </button>
+            </div>
+            
+            <!-- PDF 链接下载 -->
+            <div class="pdf-option">
+              <h4>🌐 在线链接</h4>
+              <div class="url-input-group">
+                <input 
+                  v-model="pdfUrl" 
+                  type="url" 
+                  placeholder="请输入PDF文件链接 (https://...)" 
+                  class="url-input"
+                  :disabled="isDownloading"
+                  @keyup.enter="handleDownloadPdfFromUrl"
+                />
+                <button 
+                  @click="handleDownloadPdfFromUrl" 
+                  class="action-button download-button"
+                  :disabled="!pdfUrl.trim() || isDownloading"
+                >
+                  {{ isDownloading ? '⏳ 下载中...' : '📥 下载' }}
+                </button>
+              </div>
+              <button 
+                @click="handlePrintPdfFromUrl" 
+                class="action-button print-url-button"
+                :disabled="!pdfUrl.trim() || isDownloading || !selectedPrinter"
+              >
+                {{ isDownloading ? '⏳ 处理中...' : '🖨️ 直接打印链接' }}
+              </button>
+              <button 
+                @click="handlePrintPdfFromUrlLegacy" 
+                class="action-button print-url-legacy-button"
+                :disabled="!pdfUrl.trim() || isDownloading"
+              >
+                {{ isDownloading ? '⏳ 处理中...' : '📥 下载后打印' }}
+              </button>
+            </div>
+            
+            <!-- 当前选中的文件信息 -->
             <div v-if="selectedFileName" class="selected-file-info">
               <div class="file-icon">📄</div>
               <div class="file-details">
@@ -599,10 +843,12 @@ const handlePrintSpecificPdf = async () => {
                 <div class="file-path">{{ pdfFilePath }}</div>
               </div>
             </div>
+            
+            <!-- 打印按钮 -->
             <button 
               @click="handlePrintSpecificPdf" 
               class="action-button pdf-print-button"
-              :disabled="!pdfFilePath"
+              :disabled="!pdfFilePath || isDownloading"
             >
               🖨️ 打印选中的PDF
             </button>
@@ -768,6 +1014,95 @@ header p {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.pdf-option {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.pdf-option h4 {
+  margin: 0 0 0.75rem 0;
+  color: #495057;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.url-input-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.url-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 2px solid #e1e8ed;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: border-color 0.3s ease;
+}
+
+.url-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.url-input:disabled {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+.download-button {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  min-width: 100px;
+}
+
+.download-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #218838 0%, #1ea085 100%);
+  transform: translateY(-1px);
+}
+
+.download-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.print-url-button {
+  background: linear-gradient(135deg, #007bff 0%, #6610f2 100%);
+  width: 100%;
+}
+
+.print-url-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0056b3 0%, #520dc2 100%);
+  transform: translateY(-1px);
+}
+
+.print-url-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.print-url-legacy-button {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  width: 100%;
+}
+
+.print-url-legacy-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1e7e34 0%, #17a2b8 100%);
+  transform: translateY(-1px);
+}
+
+.print-url-legacy-button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .selected-file-info {

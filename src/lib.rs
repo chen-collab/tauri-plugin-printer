@@ -10,7 +10,7 @@ use tauri::{
 use std::env;
 
 pub use crate::models::*;
-use crate::declare::PrintHtmlOptions;
+use crate::declare::{PrintHtmlOptions, PrintPdfUrlOptions};
 
 #[cfg(desktop)]
 mod desktop;
@@ -148,6 +148,45 @@ fn print_pdf(
             remove_after_print,
         };
         return windows::print_pdf(options);
+    }
+
+    return "Unsupported OS".to_string();
+}
+
+/**
+ * 从URL打印PDF
+ * @param id 打印任务ID
+ * @param url PDF文件URL
+ * @param printer 打印机名称
+ * @param print_settings 打印设置
+ * @param remove_after_print 打印完成后删除文件
+ * @param timeout_seconds 下载超时时间（秒）
+ * @param temp_dir 临时文件目录
+ * @returns 打印结果
+ */
+#[tauri::command(rename_all = "snake_case")]    
+// this will be accessible with `invoke('plugin:printer|print_pdf_from_url')`.
+fn print_pdf_from_url(
+    id: String,
+    url: String,
+    printer: String,
+    print_settings: String,
+    remove_after_print: Option<bool>,
+    timeout_seconds: Option<u64>,
+    temp_dir: Option<String>,
+) -> String {
+     
+    if cfg!(windows) {
+        let options = PrintPdfUrlOptions { 
+            id,
+            url,
+            printer,
+            print_settings,
+            remove_after_print,
+            timeout_seconds,
+            temp_dir,
+        };
+        return windows::print_pdf_from_url(options);
     }
 
     return "Unsupported OS".to_string();
@@ -297,6 +336,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             get_printers,
             get_printers_by_name,
             print_pdf,
+            print_pdf_from_url,
             get_jobs,
             get_jobs_by_id,
             resume_job,

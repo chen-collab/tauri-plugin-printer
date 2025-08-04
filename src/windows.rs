@@ -6,7 +6,7 @@ use std::thread;
 use std::fs::{File};
 use std::env;
 use std::path::{Path, PathBuf};
-use crate::declare::{PrintOptions, PrintHtmlOptions};
+use crate::declare::{PrintOptions, PrintHtmlOptions, PrintPdfUrlOptions};
 use crate::{ fsys::remove_file};
 /**
  * Create sm.exe to temp
@@ -403,4 +403,104 @@ pub fn remove_job(printername: String, jobid: String) -> String {
     // return output.stdout.to_string();
     let output = Command::new("powershell").args([format!("Remove-PrintJob -PrinterName \"{}\" -ID \"{}\" ", printername, jobid)]).output().unwrap();
     return String::from_utf8(output.stdout).unwrap();
+}
+
+/**
+ * Print PDF from URL
+ * 从URL下载PDF文件并打印
+ */
+pub fn print_pdf_from_url(options: PrintPdfUrlOptions) -> String {
+    match print_pdf_from_url_internal(options) {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("PDF URL打印失败: {}", e);
+            format!("打印失败: {}", e)
+        }
+    }
+}
+
+/// 内部实现函数，使用 Result 进行错误处理
+fn print_pdf_from_url_internal(options: PrintPdfUrlOptions) -> Result<String, String> {
+    println!("打印配置pdf from url:{}", options.url);
+    // 验证URL
+    if options.url.trim().is_empty() {
+        return Err("PDF URL不能为空".to_string());
+    }
+
+    // 检查URL是否是有效的PDF链接
+    if !options.url.to_lowercase().ends_with(".pdf") && !options.url.contains("pdf") {
+        println!("警告: URL可能不是PDF文件: {}", options.url);
+    }
+
+    // 生成临时文件路径
+    let pdf_path = generate_temp_file_path("pdf")
+        .map_err(|e| format!("生成临时文件路径失败: {}", e))?;
+    
+    println!("开始下载PDF: {} -> {:?}", options.url, pdf_path);
+
+    // 下载PDF文件
+    download_pdf_from_url(&options.url, &pdf_path, options.timeout_seconds.unwrap_or(30))?;
+
+    // 验证下载的文件是否存在
+    if !pdf_path.exists() {
+        return Err("PDF文件下载失败".to_string());
+    }
+
+    println!("PDF下载成功: {:?}", pdf_path);
+
+    // 创建打印选项
+    let print_options = PrintOptions {
+        id: options.id,
+        path: pdf_path.to_string_lossy().to_string(),
+        printer: options.printer,
+        print_settings: options.print_settings,
+        remove_after_print: options.remove_after_print,
+    };
+
+    // 执行打印
+    let result = print_pdf(print_options);
+    
+    Ok(result)
+}
+
+/// 从URL下载PDF文件
+fn download_pdf_from_url(url: &str, output_path: &Path, timeout_seconds: u64) -> Result<(), String> {
+    // 使用PowerShell的Invoke-WebRequest下载文件
+    let powershell_script = format!(
+        "try {{ \
+            $ProgressPreference = 'SilentlyContinue'; \
+            Invoke-WebRequest -Uri '{}' -OutFile '{}' -TimeoutSec {} -UseBasicParsing; \
+            Write-Output 'Download completed successfully' \
+        }} catch {{ \
+            Write-Error $_.Exception.Message \
+        }}",
+        url,
+        output_path.to_string_lossy(),
+        timeout_seconds
+    );
+
+    println!("执行下载命令: {}", powershell_script);
+
+    let output = Command::new("powershell")
+        .args(["-Command", &powershell_script])
+        .output()
+        .map_err(|e| format!("执行PowerShell命令失败: {}", e))?;
+
+    let stdout = String::from_utf8(output.stdout).unwrap_or_default();
+    let stderr = String::from_utf8(output.stderr).unwrap_or_default();
+
+    println!("下载输出: {}", stdout);
+    if !stderr.is_empty() {
+        println!("下载错误: {}", stderr);
+    }
+
+    if !output.status.success() {
+        return Err(format!("下载失败: {}", stderr));
+    }
+
+    if !stdout.contains("Download completed successfully") && !output_path.exists() {
+        return Err("下载未成功完成".to_string());
+    }
+
+    Ok(())
 }

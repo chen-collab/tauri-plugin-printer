@@ -20,6 +20,7 @@
     "printer:allow-restart-job",
     "printer:allow-pause-job",
     "printer:allow-remove-job",
+    "printer:allow-print-pdf-from-url",
     "dialog:default"
   ]
 }

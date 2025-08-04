@@ -15,7 +15,9 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.7.0",
     "@tauri-apps/plugin-dialog": "~2.3.2",
+    "@tauri-apps/plugin-fs": "^2.4.1",
     "tauri-plugin-printer-v2": "file:../../",
     "vue": "^3.5.18"
   },

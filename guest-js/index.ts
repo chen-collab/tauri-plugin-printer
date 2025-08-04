@@ -67,3 +67,26 @@ export async function printHtml(options: PrintHtmlOptions): Promise<string> {
     options: options
   });
 }
+
+export interface PrintPdfUrlOptions {
+  id: string;
+  url: string;
+  printer: string;
+  print_settings: string;
+  remove_after_print?: boolean;
+  timeout_seconds?: number;
+  temp_dir?: string;
+}
+
+export async function printPdfFromUrl(options: PrintPdfUrlOptions): Promise<string> {
+  console.log('打印配置pdf from url:', options);
+  return await invoke<string>('plugin:printer|print_pdf_from_url', {
+    id: options.id,
+    url: options.url,
+    printer: options.printer,
+    print_settings: options.print_settings,
+    remove_after_print: options.remove_after_print,
+    timeout_seconds: options.timeout_seconds,
+    temp_dir: options.temp_dir,
+  });
+}

@@ -37,3 +37,14 @@ pub struct PrintMargin {
     pub left: Option<f64>,  // 左边距
     pub unit: Option<String>,  // mm, cm, inch
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PrintPdfUrlOptions {
+    pub id: String,  // 打印任务 ID
+    pub url: String,  // PDF文件URL
+    pub printer: String,  // 打印机名称
+    pub print_settings: String,  // 打印设置
+    pub remove_after_print: Option<bool>,  // 打印完成后删除文件
+    pub timeout_seconds: Option<u64>,  // 下载超时时间（秒）
+    pub temp_dir: Option<String>,  // 临时文件目录
+}

@@ -15,6 +15,7 @@ Default permissions for the plugin
 - `allow-restart-job`
 - `allow-pause-job`
 - `allow-remove-job`
+- `allow-print-pdf-from-url`
 
 ## Permission Table
 
@@ -307,6 +308,32 @@ Enables the print_pdf command without any pre-configured scope.
 <td>
 
 Denies the print_pdf command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`printer-v2:allow-print-pdf-from-url`
+
+</td>
+<td>
+
+Enables the print_pdf_from_url command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`printer-v2:deny-print-pdf-from-url`
+
+</td>
+<td>
+
+Denies the print_pdf_from_url command without any pre-configured scope.
 
 </td>
 </tr>
