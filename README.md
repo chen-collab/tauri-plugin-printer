@@ -38,6 +38,18 @@ cargo add tauri-plugin-printer-v2
 npm install tauri-plugin-printer-v2
 ```
 
+### ⚠️ 重要说明（Windows）
+
+此插件需要 PDF 打印引擎（基于 SumatraPDF）才能打印 PDF/HTML。
+
+**方案 A（推荐）**：将 SumatraPDF.exe 重命名为 `sm.exe`，放置于：
+- `%APPDATA%\tauri-plugin-printer-v2\sm.exe` （应用数据目录，插件会自动查找）
+
+**方案 B**：直接安装 SumatraPDF 到系统默认路径，插件会自动检测并使用。
+
+[下载 SumatraPDF](https://www.sumatrapdfreader.org/download-free-pdf-viewer)
+
+
 ### 注册插件
 
 ```rust
