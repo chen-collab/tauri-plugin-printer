@@ -79,7 +79,7 @@ pub fn run() {
 ```json
 // src-tauri/capabilities/default.json
 {
-  "permissions": ["printer:default"]
+  "permissions": ["printer-v2:default"]
 }
 ```
 
