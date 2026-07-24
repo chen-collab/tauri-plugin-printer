@@ -7,19 +7,7 @@
   ],
   "permissions": [
     "core:default",
-    "printer:allow-ping",
-    "printer:allow-create-temp-file",
-    "printer:allow-remove-temp-file",
-    "printer:allow-get-printers",
-    "printer:allow-get-printers-by-name",
-    "printer:allow-print-pdf",
-    "printer:allow-print-html",
-    "printer:allow-get-jobs",
-    "printer:allow-get-jobs-by-id",
-    "printer:allow-resume-job",
-    "printer:allow-restart-job",
-    "printer:allow-pause-job",
-    "printer:allow-remove-job",
+    "printer-v2:default",
     "dialog:default"
   ]
 }

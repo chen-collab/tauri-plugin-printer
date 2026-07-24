@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Tauri App",
   "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.chen.dev",
   "build": {
     "frontendDist": "../dist",
     "beforeDevCommand": "npm run dev",

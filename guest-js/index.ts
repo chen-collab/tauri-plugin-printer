@@ -76,26 +76,26 @@ export interface PrintMargin {
 
 /** 测试连接 */
 export async function ping(value: string): Promise<string | null> {
-  return await invoke<{ value?: string }>('plugin:printer|ping', {
+  return await invoke<{ value?: string }>('plugin:printer-v2|ping', {
     payload: { value },
   }).then((r) => (r.value ? r.value : null))
 }
 
 /** 获取所有打印机 */
 export async function getPrinters(): Promise<PrinterInfo[]> {
-  return await invoke<PrinterInfo[]>('plugin:printer|get_printers')
+  return await invoke<PrinterInfo[]>('plugin:printer-v2|get_printers')
 }
 
 /** 按名称获取打印机 */
 export async function getPrinterByName(printerName: string): Promise<PrinterInfo> {
-  return await invoke<PrinterInfo>('plugin:printer|get_printers_by_name', {
+  return await invoke<PrinterInfo>('plugin:printer-v2|get_printers_by_name', {
     printername: printerName,
   })
 }
 
 /** 打印 PDF 文件 */
 export async function printPdf(options: PrintPdfOptions): Promise<string> {
-  return await invoke<string>('plugin:printer|print_pdf', {
+  return await invoke<string>('plugin:printer-v2|print_pdf', {
     id: options.id,
     path: options.path,
     printerSetting: options.printerSetting,
@@ -105,21 +105,21 @@ export async function printPdf(options: PrintPdfOptions): Promise<string> {
 
 /** 打印 HTML 内容 */
 export async function printHtml(options: PrintHtmlOptions): Promise<string> {
-  return await invoke<string>('plugin:printer|print_html', {
+  return await invoke<string>('plugin:printer-v2|print_html', {
     options: options,
   })
 }
 
 /** 获取打印任务列表 */
 export async function getJobs(printerName: string): Promise<JobInfo[]> {
-  return await invoke<JobInfo[]>('plugin:printer|get_jobs', {
+  return await invoke<JobInfo[]>('plugin:printer-v2|get_jobs', {
     printername: printerName,
   })
 }
 
 /** 按 ID 获取打印任务 */
 export async function getJobById(printerName: string, jobId: string): Promise<JobInfo> {
-  return await invoke<JobInfo>('plugin:printer|get_jobs_by_id', {
+  return await invoke<JobInfo>('plugin:printer-v2|get_jobs_by_id', {
     printername: printerName,
     jobid: jobId,
   })
@@ -127,7 +127,7 @@ export async function getJobById(printerName: string, jobId: string): Promise<Jo
 
 /** 恢复打印任务 */
 export async function resumeJob(printerName: string, jobId: string): Promise<void> {
-  return await invoke<void>('plugin:printer|resume_job', {
+  return await invoke<void>('plugin:printer-v2|resume_job', {
     printername: printerName,
     jobid: jobId,
   })
@@ -135,7 +135,7 @@ export async function resumeJob(printerName: string, jobId: string): Promise<voi
 
 /** 重启打印任务 */
 export async function restartJob(printerName: string, jobId: string): Promise<void> {
-  return await invoke<void>('plugin:printer|restart_job', {
+  return await invoke<void>('plugin:printer-v2|restart_job', {
     printername: printerName,
     jobid: jobId,
   })
@@ -143,7 +143,7 @@ export async function restartJob(printerName: string, jobId: string): Promise<vo
 
 /** 暂停打印任务 */
 export async function pauseJob(printerName: string, jobId: string): Promise<void> {
-  return await invoke<void>('plugin:printer|pause_job', {
+  return await invoke<void>('plugin:printer-v2|pause_job', {
     printername: printerName,
     jobid: jobId,
   })
@@ -151,7 +151,7 @@ export async function pauseJob(printerName: string, jobId: string): Promise<void
 
 /** 删除打印任务 */
 export async function removeJob(printerName: string, jobId: string): Promise<void> {
-  return await invoke<void>('plugin:printer|remove_job', {
+  return await invoke<void>('plugin:printer-v2|remove_job', {
     printername: printerName,
     jobid: jobId,
   })
@@ -159,7 +159,7 @@ export async function removeJob(printerName: string, jobId: string): Promise<voi
 
 /** 创建临时文件 */
 export async function createTempFile(base64Data: string, filename: string): Promise<string> {
-  return await invoke<string>('plugin:printer|create_temp_file', {
+  return await invoke<string>('plugin:printer-v2|create_temp_file', {
     bufferData: base64Data,
     filename: filename,
   })
@@ -167,7 +167,7 @@ export async function createTempFile(base64Data: string, filename: string): Prom
 
 /** 删除临时文件 */
 export async function removeTempFile(filename: string): Promise<boolean> {
-  return await invoke<boolean>('plugin:printer|remove_temp_file', {
+  return await invoke<boolean>('plugin:printer-v2|remove_temp_file', {
     filename: filename,
   })
 }

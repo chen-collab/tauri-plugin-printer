@@ -45,8 +45,8 @@ npm install tauri-plugin-printer-v2
 **二进制不嵌入插件**，由主应用通过 Tauri 资源系统打包管理：
 
 1. 下载 [SumatraPDF](https://www.sumatrapdfreader.org/download-free-pdf-viewer)
-2. 将 `SumatraPDF.exe` 重命名为 `sm.exe`
-3. 放置于 `src-tauri/resources/sm.exe`
+2. 将 `SumatraPDF.exe` 重命名为 `sm`
+3. 放置于 `src-tauri/resources/sm`
 4. 在 `tauri.conf.json` 的 `bundle` 中配置资源打包：
 
 ```json
@@ -57,14 +57,14 @@ npm install tauri-plugin-printer-v2
 }
 ```
 
-插件运行时从 Tauri 资源目录自动读取 `sm.exe`。
+插件运行时从 Tauri 资源目录自动读取 `sm`。
 
 
 ### 注册插件
 
 ```rust
 // src-tauri/src/lib.rs
-use tauri_plugin_printer::init;
+use tauri_plugin_printer_v2::init;
 
 pub fn run() {
     tauri::Builder::default()
@@ -347,9 +347,9 @@ permissions = [
 | 措施 | 说明 |
 |---|---|
 | **弃用 PowerShell** | 所有打印机操作改用原生 Windows Spooler API（`EnumPrintersW`/`OpenPrinterW`/`EnumJobsW`/`SetJobW`），**零命令注入风险** |
-| **直接子进程执行** | `sm.exe` 通过 `Command::new().args([])` 调用，参数分离，不经 Shell 解析，不从插件内部嵌入二进制 |
+| **直接子进程执行** | `sm` 通过 `Command::new().args([])` 调用，参数分离，不经 Shell 解析，不从插件内部嵌入二进制 |
 | **路径遍历防护** | `createTempFile`/`removeTempFile` 对文件名做 `sanitize_filename` 校验，拒绝 `..`、绝对路径和路径分隔符 |
-| **主程序打包资源** | `sm.exe` 由主应用通过 `tauri.conf.json` 的 `bundle.resources` 打包，插件运行时从 Tauri 资源目录读取，不嵌入插件二进制，减小发布包体积 |
+| **主程序打包资源** | `sm` 由主应用通过 `tauri.conf.json` 的 `bundle.resources` 打包，插件运行时从 Tauri 资源目录读取，不嵌入插件二进制，减小发布包体积 |
 | **无硬编码密钥** | 所有敏感信息均从环境变量或系统 API 获取 |
 
 ## 🐛 已知问题
@@ -367,7 +367,7 @@ permissions = [
 ### PDF 打印失败
 - 确保 PDF 文件路径正确且文件存在
 - 检查 `printerSetting` 是否与可用打印机名称一致（留空使用默认打印机）
-- 检查主程序是否已通过 `bundle.resources` 打包 `sm.exe` 到 `resources/` 目录
+- 检查主程序是否已通过 `bundle.resources` 打包 `sm` 到 `resources/` 目录
 
 ### HTML 打印失败
 - 确保 Microsoft Edge 可用（Windows 10+ 自带，无需额外安装）
@@ -376,9 +376,9 @@ permissions = [
 ## 📝 更新日志
 
 ### v0.4.0 (BREAKING)
-- 🏗️ **架构重构**：`sm.exe` 不再嵌入插件二进制，改为由主应用通过 `bundle.resources` 打包管理
+- 🏗️ **架构重构**：`sm` 不再嵌入插件二进制，改为由主应用通过 `bundle.resources` 打包管理
 - 📦 **极致瘦身**：发布包从 13.2MiB 降至 212KiB（减少 98.5%）
-- 🔧 **资源路径**：插件运行时从 Tauri `resource_dir()` 读取 `sm.exe`，延迟到打印时检查存在性，setup 阶段不报错
+- 🔧 **资源路径**：插件运行时从 Tauri `resource_dir()` 读取 `sm`，延迟到打印时检查存在性，setup 阶段不报错
 - 📚 **文档更新**：安装说明、安全设计、故障排除同步更新
 
 ### v0.3.0 (BREAKING)

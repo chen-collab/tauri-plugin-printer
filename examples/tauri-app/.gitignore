@@ -1,4 +1,4 @@
-# Logs
+ï»¿# Logs
 logs
 *.log
 npm-debug.log*
@@ -29,5 +29,5 @@ coverage
 
 *.tsbuildinfo
 
-# ´òÓ¡ÒıÇæ¶ş½øÖÆ£¨ĞèÊÖ¶¯·ÅÖÃ£©
-resources/sm.exe
+# æ‰“å°å¼•æ“äºŒè¿›åˆ¶ï¼ˆéœ€æ‰‹åŠ¨æ”¾ç½®ï¼‰
+resources/sm

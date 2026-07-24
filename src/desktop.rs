@@ -21,18 +21,36 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 }
 
 impl<R: Runtime> Printer<R> {
-    /// 运行时从 Tauri 资源目录解析 sm.exe 路径（延迟到打印时检查，不在 setup 阶段报错）
+    /// 运行时从 Tauri 资源目录解析 sm 路径（延迟到打印时检查，不在 setup 阶段报错）
     #[cfg(target_os = "windows")]
     fn resolve_sm_exe(&self) -> crate::Result<PathBuf> {
-        let dir = self.app.path().resource_dir()
-            .map_err(|e| crate::Error::InvalidInput(format!("获取资源目录失败: {}", e)))?;
-        let exe = dir.join("sm.exe");
-        if !exe.exists() {
-            return Err(crate::Error::InvalidInput(
-                "未找到 PDF 打印引擎 sm.exe。请确保主程序已通过 tauri.conf.json 的 bundle.resources 打包 sm.exe 到 resources/ 目录".into()
-            ));
+        // 1. 生产模式：resource_dir() → 可执行文件所在目录
+        if let Ok(dir) = self.app.path().resource_dir() {
+            let exe = dir.join("sm");
+            if exe.exists() {
+                return Ok(exe);
+            }
         }
-        Ok(exe)
+
+        // 2. 开发模式：从当前工作目录查找（tauri dev 时 CWD 为项目根目录）
+        if let Ok(cwd) = std::env::current_dir() {
+            let dev_paths = [
+                cwd.join("resources").join("sm"),           // 项目根/resources/sm
+                cwd.join("src-tauri").join("resources").join("sm"), // 项目根/src-tauri/resources/sm
+            ];
+            for p in &dev_paths {
+                if p.exists() {
+                    return Ok(p.clone());
+                }
+            }
+        }
+
+        // 3. 都未找到，报错
+        let dir = self.app.path().resource_dir()
+            .unwrap_or_else(|_| PathBuf::from("(unknown)"));
+        Err(crate::Error::InvalidInput(
+            format!("未找到 PDF 打印引擎 sm。\n  - 已检查: {}\\sm\n  - 开发模式: resources/sm 或 src-tauri/resources/sm\n请确保已按 README 放置 sm 文件", dir.display())
+        ))
     }
 
     pub fn ping(&self, payload: PingRequest) -> crate::Result<PingResponse> {

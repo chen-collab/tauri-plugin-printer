@@ -139,7 +139,7 @@ impl<R: Runtime, T: Manager<R>> crate::PrinterExt<R> for T {
 
 /// 初始化插件
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
-    Builder::new("printer")
+    Builder::new("printer-v2")
         .invoke_handler(tauri::generate_handler![
             ping,
             print_html,
