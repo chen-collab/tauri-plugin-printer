@@ -6,45 +6,6 @@ use crate::declare::{JobInfo, PrintHtmlOptions, PrintOptions, PrinterInfo};
 use crate::fsys::remove_file;
 use crate::Error;
 
-/// 初始化 sm.exe，返回其路径（不再嵌入，用户需手动提供或使用系统 SumatraPDF）
-pub fn init_windows(target_dir: &Path) -> Result<PathBuf, Error> {
-    std::fs::create_dir_all(target_dir)?;
-    
-    let exe_path = target_dir.join("sm.exe");
-    
-    // 1. 如果目标位置已存在，直接返回（用户自己放的）
-    if exe_path.exists() {
-        return Ok(exe_path);
-    }
-    
-    // 2. 尝试从系统已知位置查找 SumatraPDF
-    let known_paths = [
-        r"C:\Program Files\SumatraPDF\SumatraPDF.exe",
-        r"C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe",
-        // 用户本地数据
-        &format!(r"C:\Users\{}\AppData\Local\SumatraPDF\SumatraPDF.exe", std::env::var("USERNAME").unwrap_or_default()),
-    ];
-    
-    for path_str in known_paths {
-        let path = Path::new(path_str);
-        if path.exists() {
-            // 找到已存在的 SumatraPDF，复制一份到目标位置（避免修改系统文件）
-            let _ = std::fs::copy(path, &exe_path);
-            if exe_path.exists() {
-                return Ok(exe_path);
-            }
-        }
-    }
-    
-    // 3. 如果都没找到，返回清晰提示
-    Err(Error::InvalidInput(format!(
-        "未找到 PDF 打印引擎 (sm.exe 或 SumatraPDF.exe)。请：\n\
-         1. 手动将 SumatraPDF.exe 重命名为 sm.exe 放置于：{}\n\
-         2. 或直接安装 SumatraPDF 到系统默认路径",
-        exe_path.to_string_lossy()
-    )))
-}
-
 /// 获取所有打印机列表
 pub fn get_printers() -> Result<Vec<PrinterInfo>, Error> {
     crate::spooler::list_printers()

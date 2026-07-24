@@ -28,3 +28,6 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# 打印引擎二进制（需手动放置）
+resources/sm.exe

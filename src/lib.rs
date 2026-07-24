@@ -5,8 +5,6 @@ mod spooler;
 #[cfg(target_os = "windows")]
 mod windows;
 
-use std::path::PathBuf;
-
 use tauri::{
     plugin::{Builder, TauriPlugin},
     Manager, Runtime,
@@ -158,22 +156,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             remove_job
         ])
 .setup(|app, api| {
-            #[cfg(target_os = "windows")]
-            let sm_exe: PathBuf = {
-                let dir = app.path().app_data_dir()?;
-                match windows::init_windows(&dir) {
-                    Ok(p) => p,
-                    Err(e) => return Err(Box::new(e)),
-                }
-            };
-
             #[cfg(desktop)]
-            let printer = {
-                #[cfg(target_os = "windows")]
-                { desktop::init(app, api, sm_exe)? }
-                #[cfg(not(target_os = "windows"))]
-                { desktop::init(app, api)? }
-            };
+            let printer = desktop::init(app, api)?;
             #[cfg(mobile)]
             let printer = mobile::init(app, api)?;
 

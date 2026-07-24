@@ -25,7 +25,7 @@
 - 📋 **打印任务管理** — 查询/暂停/恢复/重启/删除打印任务，基于 `EnumJobsW`/`SetJobW` API
 - 🔍 **按名称查询打印机** — 获取单个打印机详细信息
 - 📁 **临时文件管理** — 创建/删除临时文件，含路径遍历防护
-- 🔒 **安全设计** — 弃用 PowerShell，零命令注入；路径遍历校验；sm.exe 释放到私有目录
+- 🔒 **安全设计** — 弃用 PowerShell，零命令注入；路径遍历校验；打印引擎由主程序通过 Tauri 资源系统打包管理
 - 🎯 **强类型 API** — 前端返回 camelCase 类型化对象，IDE 友好
 
 ## 📦 安装
@@ -42,12 +42,22 @@ npm install tauri-plugin-printer-v2
 
 此插件需要 PDF 打印引擎（基于 SumatraPDF）才能打印 PDF/HTML。
 
-**方案 A（推荐）**：将 SumatraPDF.exe 重命名为 `sm.exe`，放置于：
-- `%APPDATA%\tauri-plugin-printer-v2\sm.exe` （应用数据目录，插件会自动查找）
+**二进制不嵌入插件**，由主应用通过 Tauri 资源系统打包管理：
 
-**方案 B**：直接安装 SumatraPDF 到系统默认路径，插件会自动检测并使用。
+1. 下载 [SumatraPDF](https://www.sumatrapdfreader.org/download-free-pdf-viewer)
+2. 将 `SumatraPDF.exe` 重命名为 `sm.exe`
+3. 放置于 `src-tauri/resources/sm.exe`
+4. 在 `tauri.conf.json` 的 `bundle` 中配置资源打包：
 
-[下载 SumatraPDF](https://www.sumatrapdfreader.org/download-free-pdf-viewer)
+```json
+{
+  "bundle": {
+    "resources": ["resources/*"]
+  }
+}
+```
+
+插件运行时从 Tauri 资源目录自动读取 `sm.exe`。
 
 
 ### 注册插件
@@ -337,9 +347,9 @@ permissions = [
 | 措施 | 说明 |
 |---|---|
 | **弃用 PowerShell** | 所有打印机操作改用原生 Windows Spooler API（`EnumPrintersW`/`OpenPrinterW`/`EnumJobsW`/`SetJobW`），**零命令注入风险** |
-| **直接子进程执行** | `sm.exe` 通过 `Command::new().args([])` 调用，参数分离，不经 Shell 解析 |
+| **直接子进程执行** | `sm.exe` 通过 `Command::new().args([])` 调用，参数分离，不经 Shell 解析，不从插件内部嵌入二进制 |
 | **路径遍历防护** | `createTempFile`/`removeTempFile` 对文件名做 `sanitize_filename` 校验，拒绝 `..`、绝对路径和路径分隔符 |
-| **私有目录释放** | `sm.exe` 释放到 `app_data_dir()`（单用户目录），避免多用户共享 temp 目录的 TOCTOU 风险 |
+| **主程序打包资源** | `sm.exe` 由主应用通过 `tauri.conf.json` 的 `bundle.resources` 打包，插件运行时从 Tauri 资源目录读取，不嵌入插件二进制，减小发布包体积 |
 | **无硬编码密钥** | 所有敏感信息均从环境变量或系统 API 获取 |
 
 ## 🐛 已知问题
@@ -357,12 +367,19 @@ permissions = [
 ### PDF 打印失败
 - 确保 PDF 文件路径正确且文件存在
 - 检查 `printerSetting` 是否与可用打印机名称一致（留空使用默认打印机）
+- 检查主程序是否已通过 `bundle.resources` 打包 `sm.exe` 到 `resources/` 目录
 
 ### HTML 打印失败
 - 确保 Microsoft Edge 可用（Windows 10+ 自带，无需额外安装）
 - 若 Edge 被卸载，请重新安装或恢复系统组件
 
 ## 📝 更新日志
+
+### v0.4.0 (BREAKING)
+- 🏗️ **架构重构**：`sm.exe` 不再嵌入插件二进制，改为由主应用通过 `bundle.resources` 打包管理
+- 📦 **极致瘦身**：发布包从 13.2MiB 降至 212KiB（减少 98.5%）
+- 🔧 **资源路径**：插件运行时从 Tauri `resource_dir()` 读取 `sm.exe`，延迟到打印时检查存在性，setup 阶段不报错
+- 📚 **文档更新**：安装说明、安全设计、故障排除同步更新
 
 ### v0.3.0 (BREAKING)
 - 🔒 **安全重构**：弃用 PowerShell，改用原生 Windows Spooler API，消除命令注入风险

@@ -1,33 +1,40 @@
 use std::path::PathBuf;
 
 use serde::de::DeserializeOwned;
-use tauri::{plugin::PluginApi, AppHandle, Runtime};
+use tauri::{plugin::PluginApi, AppHandle, Runtime, Manager};
 
 use crate::declare::{PrintHtmlOptions, PrintOptions, PrinterInfo, JobInfo};
 use crate::models::*;
 
 /// 打印机 API 访问入口
 pub struct Printer<R: Runtime> {
-    #[allow(dead_code)]
     app: AppHandle<R>,
-    /// sm.exe 可执行文件路径（仅 Windows）
-    #[cfg(target_os = "windows")]
-    sm_exe: PathBuf,
 }
 
 pub fn init<R: Runtime, C: DeserializeOwned>(
     app: &AppHandle<R>,
     _api: PluginApi<R, C>,
-    #[cfg(target_os = "windows")] sm_exe: PathBuf,
 ) -> crate::Result<Printer<R>> {
     Ok(Printer {
         app: app.clone(),
-        #[cfg(target_os = "windows")]
-        sm_exe,
     })
 }
 
 impl<R: Runtime> Printer<R> {
+    /// 运行时从 Tauri 资源目录解析 sm.exe 路径（延迟到打印时检查，不在 setup 阶段报错）
+    #[cfg(target_os = "windows")]
+    fn resolve_sm_exe(&self) -> crate::Result<PathBuf> {
+        let dir = self.app.path().resource_dir()
+            .map_err(|e| crate::Error::InvalidInput(format!("获取资源目录失败: {}", e)))?;
+        let exe = dir.join("sm.exe");
+        if !exe.exists() {
+            return Err(crate::Error::InvalidInput(
+                "未找到 PDF 打印引擎 sm.exe。请确保主程序已通过 tauri.conf.json 的 bundle.resources 打包 sm.exe 到 resources/ 目录".into()
+            ));
+        }
+        Ok(exe)
+    }
+
     pub fn ping(&self, payload: PingRequest) -> crate::Result<PingResponse> {
         Ok(PingResponse { value: payload.value })
     }
@@ -48,14 +55,20 @@ impl<R: Runtime> Printer<R> {
 
     pub fn print_pdf(&self, options: PrintOptions) -> crate::Result<String> {
         #[cfg(target_os = "windows")]
-        { crate::windows::print_pdf(options, &self.sm_exe).map_err(Into::into) }
+        {
+            let sm_exe = self.resolve_sm_exe()?;
+            crate::windows::print_pdf(options, &sm_exe)
+        }
         #[cfg(not(target_os = "windows"))]
         { Err(crate::Error::UnsupportedPlatform) }
     }
 
     pub fn print_html(&self, options: PrintHtmlOptions) -> crate::Result<String> {
         #[cfg(target_os = "windows")]
-        { crate::windows::print_html(options, &self.sm_exe).map_err(Into::into) }
+        {
+            let sm_exe = self.resolve_sm_exe()?;
+            crate::windows::print_html(options, &sm_exe)
+        }
         #[cfg(not(target_os = "windows"))]
         { Err(crate::Error::UnsupportedPlatform) }
     }
