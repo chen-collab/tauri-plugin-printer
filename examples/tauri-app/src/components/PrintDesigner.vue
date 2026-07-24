@@ -111,10 +111,11 @@ const handlePrint = async () => {
   statusMsg.value = "正在生成打印内容...";
   try {
     const paper = curPaper.value;
-    // 从 hiprint 获取渲染后的 HTML
+// 从 hiprint 获取渲染后的 HTML（返回 jQuery 对象，包裹 <div class="hiprint-printTemplate">）
     const htmlResult = hiprintTemplate.getHtml(printData);
     if (!htmlResult || !htmlResult.length) throw new Error("请先添加打印元素");
-    const htmlContent = htmlResult[0].target.outerHTML;
+    // 获取面板渲染的 HTML 内容（jQuery 对象的 .html() 返回内部 HTML 字符串）
+    const htmlContent = htmlResult.html();
     // 构建完整 HTML 文档
     const fullHtml = "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n<style>\n  * { box-sizing: border-box; margin: 0; padding: 0; }\n  body { font-family: \"Microsoft YaHei\", \"SimHei\", sans-serif; }\n  @page { size: " + paper.width + "mm " + paper.height + "mm; margin: 0; }\n</style>\n</head>\n<body>" + htmlContent + "</body>\n</html>";
     statusMsg.value = "正在发送到打印机...";
