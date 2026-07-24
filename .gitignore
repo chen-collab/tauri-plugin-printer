@@ -136,4 +136,3 @@ examples/vue-plugin-hiprint-main/src/i18n/ru.json
 examples/vue-plugin-hiprint-main/src/utils/index.js
 
 # Exclude large binary from git and crates.io
-src/bin/
