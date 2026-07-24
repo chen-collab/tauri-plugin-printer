@@ -4,7 +4,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/tauri-plugin-printer-v2.svg)](https://crates.io/crates/tauri-plugin-printer-v2)
 [![NPM](https://img.shields.io/npm/v/tauri-plugin-printer-v2.svg)](https://www.npmjs.com/package/tauri-plugin-printer-v2)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) 
 [![Tauri](https://img.shields.io/badge/Tauri-v2.11-orange.svg)](https://tauri.app/)
 
 **Tauri V2 打印机插件 — 安全、高性能、强类型**
@@ -40,7 +40,7 @@ npm install tauri-plugin-printer-v2
 
 ### ⚠️ 重要说明（Windows）
 
-此插件需要 PDF 打印引擎（基于 SumatraPDF）才能打印 PDF/HTML。
+此插件需要 PDF 打印引擎（基于 SumatraPDF）才能打印 PDF/HTML。 
 
 **二进制不嵌入插件**，由主应用通过 Tauri 资源系统打包管理：
 
