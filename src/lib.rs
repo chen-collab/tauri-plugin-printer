@@ -1,16 +1,19 @@
-mod declare;
+﻿mod declare;
 mod fsys;
+#[cfg(target_os = "windows")]
+mod spooler;
+#[cfg(target_os = "windows")]
 mod windows;
+
+use std::path::PathBuf;
 
 use tauri::{
     plugin::{Builder, TauriPlugin},
     Manager, Runtime,
 };
 
-use std::env;
-
 pub use crate::models::*;
-use crate::declare::PrintHtmlOptions;
+use crate::declare::{PrintHtmlOptions, PrintOptions, PrinterInfo, JobInfo};
 
 #[cfg(desktop)]
 mod desktop;
@@ -27,25 +30,105 @@ use desktop::Printer;
 #[cfg(mobile)]
 use mobile::Printer;
 
-/**
- * 测试打印机连接
- */
+/// 测试打印机连接
 #[tauri::command]
 async fn ping<R: Runtime>(app: tauri::AppHandle<R>, payload: PingRequest) -> Result<PingResponse> {
     app.printer().ping(payload)
 }
 
-/**
- * 打印 HTML 内容
- */
-#[tauri::command(rename_all = "snake_case")]
+/// 打印 HTML 内容
+#[tauri::command(rename_all = "camelCase")]
 async fn print_html<R: Runtime>(app: tauri::AppHandle<R>, options: PrintHtmlOptions) -> Result<String> {
-    println!("print_html: {:?}", options.print_settings);
     app.printer().print_html(options)
 }
 
+/// 创建临时文件
+#[tauri::command(rename_all = "camelCase")]
+fn create_temp_file(buffer_data: String, filename: String) -> Result<String> {
+    let safe_name = fsys::sanitize_filename(&filename)?;
+    let dir = std::env::temp_dir();
+    let file_path = dir.join(&safe_name);
+    fsys::create_file_from_base64(&buffer_data, file_path.to_str().unwrap_or(""))?;
+    Ok(file_path.to_string_lossy().to_string())
+}
 
-/// Extensions to [`tauri::App`], [`tauri::AppHandle`] and [`tauri::Window`] to access the printer APIs.
+/// 删除临时文件
+#[tauri::command(rename_all = "camelCase")]
+fn remove_temp_file(filename: String) -> Result<bool> {
+    let safe_name = fsys::sanitize_filename(&filename)?;
+    let dir = std::env::temp_dir();
+    let file_path = dir.join(&safe_name);
+    fsys::remove_file(file_path.to_str().unwrap_or(""))?;
+    Ok(true)
+}
+
+/// 获取打印机列表
+#[tauri::command]
+async fn get_printers<R: Runtime>(app: tauri::AppHandle<R>) -> Result<Vec<PrinterInfo>> {
+    app.printer().get_printers()
+}
+
+/// 按名称获取打印机
+#[tauri::command(rename_all = "camelCase")]
+async fn get_printers_by_name<R: Runtime>(app: tauri::AppHandle<R>, printername: String) -> Result<PrinterInfo> {
+    app.printer().get_printer_by_name(&printername)
+}
+
+/// 打印 PDF
+#[tauri::command(rename_all = "camelCase")]
+async fn print_pdf<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    id: String,
+    path: String,
+    printer_setting: String,
+    remove_after_print: bool,
+) -> Result<String> {
+    let options = PrintOptions { id, path, printer_setting, remove_after_print };
+    app.printer().print_pdf(options)
+}
+
+/// 获取打印任务列表
+#[tauri::command(rename_all = "camelCase")]
+async fn get_jobs<R: Runtime>(app: tauri::AppHandle<R>, printername: String) -> Result<Vec<JobInfo>> {
+    app.printer().get_jobs(&printername)
+}
+
+/// 按 ID 获取打印任务
+#[tauri::command(rename_all = "camelCase")]
+async fn get_jobs_by_id<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<JobInfo> {
+    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+    app.printer().get_job_by_id(&printername, jid)
+}
+
+/// 恢复打印任务
+#[tauri::command(rename_all = "camelCase")]
+async fn resume_job<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<()> {
+    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+    app.printer().resume_job(&printername, jid)
+}
+
+/// 重启打印任务
+#[tauri::command(rename_all = "camelCase")]
+async fn restart_job<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<()> {
+    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+    app.printer().restart_job(&printername, jid)
+}
+
+/// 暂停打印任务
+#[tauri::command(rename_all = "camelCase")]
+async fn pause_job<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<()> {
+    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+    app.printer().pause_job(&printername, jid)
+}
+
+/// 删除打印任务
+#[tauri::command(rename_all = "camelCase")]
+async fn remove_job<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<()> {
+    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+    app.printer().remove_job(&printername, jid)
+}
+
+/// 扩展方法，从 Tauri 状态中获取 Printer 实例
 pub trait PrinterExt<R: Runtime> {
     fn printer(&self) -> &Printer<R>;
 }
@@ -56,234 +139,8 @@ impl<R: Runtime, T: Manager<R>> crate::PrinterExt<R> for T {
     }
 }
 
-/**
- * 创建临时文件
- * @param buffer_data base64字符串
- * @param filename 文件名
- * @returns 临时文件路径
- */
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|create_temp_file')`.
-fn create_temp_file(buffer_data: String, filename: String) -> String {
-    let dir = env::temp_dir();
-    let result = fsys::create_file_from_base64(
-        buffer_data.as_str(),
-        format!("{}{}", dir.display(), filename).as_str(),
-    );
-    if result.is_ok() {
-        return format!("{}{}", dir.display(), filename);
-    }
-    return "".to_owned();
-}
-
-/**
- * 删除临时文件
- * @param filename 文件名
- * @returns 删除结果
- */
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|create_temp_file')`.
-fn remove_temp_file(filename: String) -> bool {
-    let dir = env::temp_dir();
-    let result = fsys::remove_file(format!("{}{}", dir.display(), filename).as_str());
-    if result.is_ok() {
-        return true;
-    }
-    return false;
-}
-
-/**
- * 获取打印机列表
- */
-#[tauri::command]
-// this will be accessible with `invoke('plugin:printer|get_printers')`.
-fn get_printers() -> String {
-    if cfg!(windows) {
-        return windows::get_printers();
-    }
-
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 获取打印机列表
- * @param printername 打印机名称
- * @returns 打印机列表
- */
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|get_printer_by_name')`.
-fn get_printers_by_name(printername: String) -> String {
-    println!("获取打印机列表: {}", printername);
-    if cfg!(windows) {
-        return windows::get_printers_by_name(printername);
-    }
-
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 打印PDF
- * @param id 打印机ID
- * @param path PDF文件路径
- * @param printer_setting 打印机设置
- * @param remove_after_print 打印完成后删除文件
- * @returns 打印结果
- */
-#[tauri::command(rename_all = "snake_case")]    
-// this will be accessible with `invoke('plugin:printer|print_pdf')`.
-fn print_pdf(
-    id: String,
-    path: String,
-    printer_setting: String,
-    remove_after_print: bool,
-) -> String {
-     
-    if cfg!(windows) {
-        let options = declare::PrintOptions { 
-            id,
-            path,
-            print_setting: printer_setting,
-            remove_after_print: remove_after_print,
-        };
-        return windows::print_pdf(options);
-    }
-
-    return "Unsupported OS".to_string();
-}
-
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|get_jobs')`.
-fn get_jobs(printername: String) -> String {
-    if cfg!(windows) {
-        return windows::get_jobs(printername);
-    }
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 获取打印任务列表
- * @param printername 打印机名称
- * @param jobid 打印任务ID
- * @returns 打印任务列表
- */
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|get_jobs_by_id')`.
-fn get_jobs_by_id(printername: String, jobid: String) -> String {
-    if cfg!(windows) {
-        return windows::get_jobs_by_id(printername, jobid);
-    }
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 恢复打印任务
- * @param printername 打印机名称
- * @param jobid 打印任务ID
- * @returns 恢复结果
- */
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|restart_job')`.
-fn resume_job(printername: String, jobid: String) -> String {
-    if cfg!(windows) {
-        return windows::resume_job(printername, jobid);
-    }
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 重启打印任务
- * @param printername 打印机名称
- * @param jobid 打印任务ID
- * @returns 重启结果
- */
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|restart_job')`.
-fn restart_job(printername: String, jobid: String) -> String {
-    if cfg!(windows) {
-        return windows::restart_job(printername, jobid);
-    }
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 暂停打印任务
- * @param printername 打印机名称
- * @param jobid 打印任务ID
- * @returns 暂停结果
- */
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|pause_job')`.
-fn pause_job(printername: String, jobid: String) -> String {
-    if cfg!(windows) {
-        return windows::pause_job(printername, jobid);
-    }
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 删除打印任务
- * @param printername 打印机名称
- * @param jobid 打印任务ID
- * @returns 删除结果
- */
-#[tauri::command(rename_all = "snake_case")]
-// this will be accessible with `invoke('plugin:printer|remove_job')`.
-fn remove_job(printername: String, jobid: String) -> String {
-    if cfg!(windows) {
-        return windows::remove_job(printername, jobid);
-    }
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 获取打印机列表
- * @param printername 打印机名称
- * @returns 打印机列表
- */
-pub fn custom_get_printers_by_name(printername: String) -> String {
-    if cfg!(windows) {
-        return windows::get_printers_by_name(printername);
-    }
-
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 打印PDF
- * @param id 打印机ID
- * @param path PDF文件路径
- * @param printer_setting 打印机设置
- * @param remove_after_print 打印完成后删除文件
- * @returns 打印结果
- */
-pub fn custom_print_pdf(
-    id: String,
-    path: String,
-    printer_setting: String,
-    remove_after_print: bool,
-) -> String {
-    if cfg!(windows) {
-        let options = declare::PrintOptions {
-            id,
-            path,
-            print_setting: printer_setting,
-            remove_after_print: remove_after_print,
-        };
-        return windows::print_pdf(options);
-    }
-
-    return "Unsupported OS".to_string();
-}
-
-/**
- * 初始化插件
- * @returns 初始化结果
- */
-/// Initializes the plugin.
+/// 初始化插件
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
-  if cfg!(windows) {
-    windows::init_windows();
-  }
     Builder::new("printer")
         .invoke_handler(tauri::generate_handler![
             ping,
@@ -300,11 +157,26 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             pause_job,
             remove_job
         ])
-        .setup(|app, api| {
+.setup(|app, api| {
+            #[cfg(target_os = "windows")]
+            let sm_exe: PathBuf = {
+                let dir = app.path().app_data_dir()?;
+                match windows::init_windows(&dir) {
+                    Ok(p) => p,
+                    Err(e) => return Err(Box::new(e)),
+                }
+            };
+
+            #[cfg(desktop)]
+            let printer = {
+                #[cfg(target_os = "windows")]
+                { desktop::init(app, api, sm_exe)? }
+                #[cfg(not(target_os = "windows"))]
+                { desktop::init(app, api)? }
+            };
             #[cfg(mobile)]
             let printer = mobile::init(app, api)?;
-            #[cfg(desktop)]
-            let printer = desktop::init(app, api)?;
+
             app.manage(printer);
             Ok(())
         })

@@ -9,6 +9,14 @@ pub enum Error {
   #[cfg(mobile)]
   #[error(transparent)]
   PluginInvoke(#[from] tauri::plugin::mobile::PluginInvokeError),
+  #[error("unsupported platform")]
+  UnsupportedPlatform,
+  #[error("Windows API 调用失败: {0}")]
+  WindowsApi(String),
+  #[error("无效输入: {0}")]
+  InvalidInput(String),
+  #[error("Base64 解码失败: {0}")]
+  Base64(String),
 }
 
 impl Serialize for Error {

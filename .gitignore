@@ -12,6 +12,14 @@ yarn.lock
 /target
 Cargo.lock
 node_modules/
+/example
+.opencode/
+/dist
+.codegraph/
+.codebuddy/
 
 dist-js
 dist
+opencode.json
+CODEBUDDY.md
+AGENTS.md

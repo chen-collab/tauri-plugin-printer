@@ -4,10 +4,12 @@ Default permissions for the plugin
 
 #### This default permission set includes the following:
 
+- `allow-ping`
 - `allow-create-temp-file`
 - `allow-remove-temp-file`
 - `allow-get-printers`
 - `allow-get-printers-by-name`
+- `allow-print-html`
 - `allow-print-pdf`
 - `allow-get-jobs`
 - `allow-get-jobs-by-id`
