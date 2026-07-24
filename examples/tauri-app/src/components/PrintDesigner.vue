@@ -1,10 +1,16 @@
 ﻿<script setup>
 import { ref, onMounted, nextTick, computed } from "vue";
-import { printHtml } from "tauri-plugin-printer-v2";
+import { getPrinters, printHtml } from "tauri-plugin-printer-v2";
 // vue-plugin-hiprint 已在 index.html 中以全局脚本加载，直接使用 window.hiprint
 const { hiprint, defaultElementTypeProvider } = window["vue-plugin-hiprint"];
 import panel from "./panel.js";
 import printData from "./print-data.js";
+import ReceiptDesigner from "./designers/ReceiptDesigner.vue";
+import MedicalRecordDesigner from "./designers/MedicalRecordDesigner.vue";
+import PrescriptionDesigner from "./designers/PrescriptionDesigner.vue";
+
+// 排版设计子 tab
+const designerTab = ref("general"); // general | receipt | record | rx
 
 // ========== 纸张类型配置 ==========
 const PAPER_TYPES = {
@@ -24,6 +30,10 @@ const scaleMax = 5;
 const scaleMin = 0.5;
 const isPrinting = ref(false);
 const statusMsg = ref("初始化中...");
+const printerList = ref([]);
+const selectedPrinter = ref("");
+const customWidth = ref(100);
+const customHeight = ref(150);
 
 let hiprintTemplate = null;
 
@@ -88,6 +98,22 @@ const setPaper = (type, value) => {
   }
 };
 
+// 是否为自定义纸张
+const isCustomPaper = computed(() => {
+  return curPaperType.value === "自定义";
+});
+
+// ========== 自定义纸张 ==========
+const setCustomPaper = () => {
+  let w = Number(customWidth.value);
+  let h = Number(customHeight.value);
+  if (!w || w < 10) { w = 100; customWidth.value = 100; }
+  if (!h || h < 10) { h = 150; customHeight.value = 150; }
+  if (w > 2000) { w = 2000; customWidth.value = 2000; }
+  if (h > 2000) { h = 2000; customHeight.value = 2000; }
+  setPaper("自定义", { width: w, height: h });
+};
+
 // ========== 缩放 ==========
 const changeScale = (big) => {
   let sv = scaleValue.value;
@@ -119,13 +145,14 @@ const handlePrint = async () => {
     // 构建完整 HTML 文档
     const fullHtml = "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n<style>\n  * { box-sizing: border-box; margin: 0; padding: 0; }\n  body { font-family: \"Microsoft YaHei\", \"SimHei\", sans-serif; }\n  @page { size: " + paper.width + "mm " + paper.height + "mm; margin: 0; }\n</style>\n</head>\n<body>" + htmlContent + "</body>\n</html>";
     statusMsg.value = "正在发送到打印机...";
-    // 调用 Tauri 原生打印
+// 调用 Tauri 原生打印
     const result = await printHtml({
       html: fullHtml,
       pageWidth: paper.width,
       pageHeight: paper.height,
       orientation: paper.width > paper.height ? "Landscape" : "Portrait",
       margin: { top: 0, bottom: 0, left: 0, right: 0, unit: "mm" },
+      printerId: selectedPrinter.value || undefined,
       removeAfterPrint: true,
     });
     statusMsg.value = "打印成功: " + result;
@@ -183,15 +210,39 @@ const handleLoad = () => {
   }
 };
 
+// ========== 加载打印机列表 ==========
+const loadPrinters = async () => {
+  try {
+    const list = await getPrinters();
+    printerList.value = list;
+    if (list.length > 0) {
+      selectedPrinter.value = list[0].name;
+    }
+  } catch (error) {
+    console.error("获取打印机列表失败:", error);
+  }
+};
+
 onMounted(() => {
   nextTick(() => { initDesigner(); });
+  loadPrinters();
 });
 </script>
 <template>
-  <div class="print-designer">
+<div class="print-designer">
+    <!-- 子 Tab 导航 -->
+    <div class="designer-sub-tabs">
+      <button :class="['sub-tab-btn', { active: designerTab === 'general' }]" @click="designerTab = 'general'">通用设计</button>
+      <button :class="['sub-tab-btn', { active: designerTab === 'receipt' }]" @click="designerTab = 'receipt'">结算小票</button>
+      <button :class="['sub-tab-btn', { active: designerTab === 'record' }]" @click="designerTab = 'record'">病历</button>
+      <button :class="['sub-tab-btn', { active: designerTab === 'rx' }]" @click="designerTab = 'rx'">处方</button>
+    </div>
+
+    <!-- 通用设计 -->
+    <template v-if="designerTab === 'general'">
     <!-- 顶部工具栏 -->
     <div class="designer-toolbar">
-      <!-- 纸张选择 -->
+<!-- 纸张选择 -->
       <div class="toolbar-group">
         <span class="toolbar-label">纸张:</span>
         <button
@@ -200,6 +251,41 @@ onMounted(() => {
           :class="['paper-btn', { active: curPaperType === type }]"
           @click="setPaper(type, value)"
         >{{ type }}</button>
+        <button
+          :class="['paper-btn', { active: isCustomPaper }]"
+          @click="setCustomPaper()"
+        >自定义</button>
+        <div v-if="isCustomPaper" class="custom-size-inputs">
+          <input
+            v-model.number="customWidth"
+            type="number"
+            min="10"
+            max="2000"
+            class="size-input"
+            @input="setCustomPaper()"
+            title="宽度 (mm)"
+          />
+          <span class="size-sep">×</span>
+          <input
+            v-model.number="customHeight"
+            type="number"
+            min="10"
+            max="2000"
+            class="size-input"
+            @input="setCustomPaper()"
+            title="高度 (mm)"
+          />
+          <span class="size-unit">mm</span>
+        </div>
+      </div>
+
+      <!-- 打印机选择 -->
+      <div class="toolbar-group">
+        <span class="toolbar-label">打印机:</span>
+        <select v-model="selectedPrinter" class="printer-select">
+          <option value="" disabled>请选择打印机</option>
+          <option v-for="p in printerList" :key="p.name" :value="p.name">{{ p.name }}</option>
+        </select>
       </div>
 
       <!-- 缩放 -->
@@ -313,8 +399,18 @@ onMounted(() => {
     <!-- 分页容器 -->
     <div id="hiprintPagination" class="hiprint-pagination"></div>
 
-    <!-- 状态栏 -->
+<!-- 状态栏 -->
     <div class="designer-status">{{ statusMsg }}</div>
+    </template>
+
+    <!-- 结算小票 -->
+    <ReceiptDesigner v-if="designerTab === 'receipt'" />
+
+    <!-- 病历 -->
+    <MedicalRecordDesigner v-if="designerTab === 'record'" />
+
+    <!-- 处方 -->
+    <PrescriptionDesigner v-if="designerTab === 'rx'" />
   </div>
 </template>
 <style scoped>
@@ -322,6 +418,21 @@ onMounted(() => {
   display: flex; flex-direction: column; height: 100%;
   background: #f0f2f5; border-radius: 8px; overflow: hidden;
 }
+
+/* 子 Tab 导航 */
+.designer-sub-tabs {
+  display: flex; gap: 0;
+  background: #fff; border-bottom: 2px solid #e0e0e0;
+  padding: 0 16px;
+}
+.sub-tab-btn {
+  padding: 10px 20px; border: none; background: transparent;
+  font-size: 13px; font-weight: 600; color: #7f8c8d;
+  cursor: pointer; transition: all 0.2s; border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+.sub-tab-btn:hover { color: #2c3e50; }
+.sub-tab-btn.active { color: #667eea; border-bottom-color: #667eea; }
 
 /* 工具栏 */
 .designer-toolbar {
@@ -350,6 +461,31 @@ onMounted(() => {
 .btn-preview { background: #f0f5ff; border-color: #adc6ff; color: #2f54eb; }
 .btn-print { background: #f6ffed; border-color: #b7eb8f; color: #52c41a; }
 .btn-print:disabled { background: #f5f5f5; }
+
+.printer-select {
+  padding: 4px 10px; border: 1px solid #d9d9d9; border-radius: 4px;
+  background: #fff; font-size: 12px; cursor: pointer; max-width: 220px;
+  outline: none; transition: border-color 0.15s;
+}
+.printer-select:hover { border-color: #667eea; }
+.printer-select:focus { border-color: #667eea; box-shadow: 0 0 0 2px rgba(102,126,234,0.15); }
+
+.custom-size-inputs {
+  display: inline-flex; align-items: center; gap: 2px;
+  margin-left: 4px;
+}
+.size-input {
+  width: 52px; padding: 3px 4px; border: 1px solid #d9d9d9; border-radius: 4px;
+  font-size: 12px; text-align: center; outline: none;
+  transition: border-color 0.15s;
+  -moz-appearance: textfield;
+}
+.size-input::-webkit-inner-spin-button,
+.size-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.size-input:hover { border-color: #667eea; }
+.size-input:focus { border-color: #667eea; box-shadow: 0 0 0 2px rgba(102,126,234,0.15); }
+.size-sep { font-size: 12px; color: #999; user-select: none; }
+.size-unit { font-size: 11px; color: #999; margin-left: 1px; }
 .btn-save { background: #fff7e6; border-color: #ffd591; color: #fa8c16; }
 .btn-load { background: #e6fffb; border-color: #87e8de; color: #13c2c2; }
 .btn-clear { background: #fff1f0; border-color: #ffa39e; color: #f5222d; }
