@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Print Render Engine</title>
+  <!--
+    打印渲染引擎（三层架构之「纯计算引擎」层）
+    ============================================
+    单一职责：接收模板 JSON + 打印数据 + 纸张参数，
+    实例化 hiprint 模板 → 等待全部图片加载 → 计算内容像素高度 →
+    输出内嵌 Base64 图片的完整打印 HTML。
+
+    禁止：业务判断、打印机选择、打印动作、文件读写、网络请求。
+
+    对外 API：
+      window.renderAndCalculate({ templateJson, dataJson, paperWidthMm, paperHeightMm })
+        -> Promise<{ html: string, contentHeightPx: number }>
+  -->
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Microsoft YaHei", "SimHei", sans-serif; background: transparent; }
+    /* 渲染容器：离屏定位，不显示但参与布局计算 */
+    #render-container {
+      position: absolute;
+      left: -99999px;
+      top: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    @page { margin: 0; }
+  </style>
+
+  <!-- hiprint 依赖（按顺序加载） -->
+  <script src="./jquery.min.js"></script>
+  <script src="./jsbarcode.min.js"></script>
+  <script src="./bwip-js.js"></script>
+  <script src="./vue-plugin-hiprint.js"></script>
+</head>
+<body>
+  <!-- 渲染容器（离屏，只用于布局计算） -->
+  <div id="render-container"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // 获取 hiprint 全局对象
+      var hiprint = window.hiprint || (window['vue-plugin-hiprint'] && window['vue-plugin-hiprint'].hiprint);
+      var defaultElementTypeProvider = window['vue-plugin-hiprint']
+        ? window['vue-plugin-hiprint'].defaultElementTypeProvider
+        : null;
+
+      // hiprint 只初始化一次
+      var inited = false;
+      function ensureInit() {
+        if (inited) return;
+        if (!hiprint) throw new Error('hiprint not loaded');
+        if (defaultElementTypeProvider) {
+          hiprint.init({ providers: [new defaultElementTypeProvider()] });
+        }
+        // 禁用自动 socket 连接（纯渲染引擎不需要）
+        if (typeof hiprint.setConfig === 'function') {
+          hiprint.setConfig({
+            movingDistance: 2.5,
+            text: {
+              supportOptions: [
+                { name: 'styler', hidden: true },
+                { name: 'formatter', hidden: true },
+              ],
+            },
+          });
+        }
+        inited = true;
+      }
+
+      /**
+       * 等待容器内所有图片加载完成
+       * @param {HTMLElement} container - 容器元素
+       * @param {number} timeoutMs - 超时时间（毫秒）
+       * @returns {Promise<void>}
+       */
+      function waitForImages(container, timeoutMs) {
+        return new Promise(function (resolve, reject) {
+          var imgs = container.querySelectorAll('img');
+          if (imgs.length === 0) {
+            resolve();
+            return;
+          }
+
+          var loaded = 0;
+          var total = imgs.length;
+          var done = false;
+
+          var timeoutId = setTimeout(function () {
+            if (done) return;
+            done = true;
+            // 超时不报错，返回已加载的部分
+            resolve();
+          }, timeoutMs);
+
+          function checkDone() {
+            loaded++;
+            if (loaded >= total && !done) {
+              done = true;
+              clearTimeout(timeoutId);
+              resolve();
+            }
+          }
+
+          for (var i = 0; i < total; i++) {
+            (function (img) {
+              // 已经加载完成（缓存或 base64）
+              if (img.complete && img.naturalWidth !== undefined) {
+                checkDone();
+                return;
+              }
+              img.onload = checkDone;
+              img.onerror = checkDone; // 加载失败也算完成（不阻塞）
+            })(imgs[i]);
+          }
+        });
+      }
+
+      /**
+       * 将容器内所有图片转为 base64 data URI
+       * （隐藏 WebView 打印窗口无法加载网络/鉴权图片，必须内嵌）
+       * @param {HTMLElement} container - 容器元素
+       * @returns {Promise<void>}
+       */
+      function convertImagesToBase64(container) {
+        var imgs = container.querySelectorAll('img');
+        if (imgs.length === 0) return Promise.resolve();
+
+        var tasks = [];
+        for (var i = 0; i < imgs.length; i++) {
+          tasks.push(convertOne(imgs[i]));
+        }
+        return Promise.all(tasks).then(function () { });
+
+        function convertOne(img) {
+          return new Promise(function (resolve) {
+            var src = img.getAttribute('src');
+            if (!src || src.indexOf('data:') === 0 || src.indexOf('blob:') === 0) {
+              resolve();
+              return;
+            }
+            try {
+              var canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth || img.width || 1;
+              canvas.height = img.naturalHeight || img.height || 1;
+              var ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              var dataUrl = canvas.toDataURL('image/png');
+              img.setAttribute('src', dataUrl);
+            } catch (e) {
+              // 跨域等失败，保留原图
+            }
+            resolve();
+          });
+        }
+      }
+
+      /**
+       * 渲染并计算高度
+       * @param {Object} params
+       * @param {string} params.templateJson - hiprint 模板 JSON 字符串
+       * @param {string} params.dataJson - 打印数据 JSON 字符串
+       * @param {number} params.paperWidthMm - 纸张宽度（mm）
+       * @param {number} [params.paperHeightMm] - 纸张高度（mm），0 或不传表示自适应
+       * @returns {Promise<{html: string, contentHeightPx: number}>}
+       */
+      window.renderAndCalculate = function (params) {
+        return new Promise(function (resolve, reject) {
+          try {
+            ensureInit();
+
+            var templateObj;
+            try {
+              templateObj = JSON.parse(params.templateJson);
+            } catch (e) {
+              reject(new Error('模板 JSON 解析失败: ' + e.message));
+              return;
+            }
+
+            var dataObj;
+            try {
+              dataObj = JSON.parse(params.dataJson);
+            } catch (e) {
+              reject(new Error('数据 JSON 解析失败: ' + e.message));
+              return;
+            }
+
+            var paperWidthMm = params.paperWidthMm;
+            if (!paperWidthMm || paperWidthMm <= 0) {
+              reject(new Error('纸张宽度必须大于 0'));
+              return;
+            }
+
+            // 设置渲染容器宽度（像素，假设 96 DPI：1mm = 96/25.4 px）
+            var container = document.getElementById('render-container');
+            var widthPx = (paperWidthMm * 96) / 25.4;
+            container.style.width = widthPx + 'px';
+
+            // 清空容器
+            container.innerHTML = '';
+
+            // 创建 hiprint 模板实例并渲染
+            var tpl = new hiprint.PrintTemplate({
+              template: templateObj,
+              dataMode: 1,
+              history: false,
+            });
+
+            // 渲染到离屏容器（getHtml 方式更干净）
+            var htmlResult = tpl.getHtml(dataObj);
+            if (!htmlResult || !htmlResult.length) {
+              reject(new Error('模板渲染失败：无内容'));
+              return;
+            }
+
+            // 获取渲染后的 HTML 内容
+            var innerHtml = htmlResult.html();
+            container.innerHTML = innerHtml;
+
+            // 等待图片加载（超时 10 秒）
+            waitForImages(container, 10000).then(function () {
+              // 所有图片加载完成后，转 base64
+              return convertImagesToBase64(container);
+            }).then(function () {
+              // 计算内容像素高度
+              var contentHeightPx = container.scrollHeight;
+
+              // 构建完整 HTML 文档（带 @page CSS）
+              var fullHtml = buildFullHtml(
+                container.innerHTML,
+                paperWidthMm,
+                contentHeightPx
+              );
+
+              resolve({
+                html: fullHtml,
+                contentHeightPx: contentHeightPx,
+              });
+            }).catch(function (err) {
+              reject(err);
+            });
+
+          } catch (err) {
+            reject(err);
+          }
+        });
+      };
+
+      /**
+       * 构建完整 HTML 文档
+       * @param {string} bodyHtml - body 内容
+       * @param {number} paperWidthMm - 纸张宽度（mm）
+       * @param {number} contentHeightPx - 内容像素高度
+       * @returns {string}
+       */
+      function buildFullHtml(bodyHtml, paperWidthMm, contentHeightPx) {
+        // 像素转 mm（96 DPI）
+        var contentHeightMm = (contentHeightPx * 25.4) / 96;
+        if (contentHeightMm < 10) contentHeightMm = 10;
+        var heightMm = Math.ceil(contentHeightMm * 10) / 10;
+
+        return '<!DOCTYPE html>\n' +
+          '<html lang="zh-CN">\n' +
+          '<head>\n' +
+          '<meta charset="UTF-8">\n' +
+          '<style>\n' +
+          '  * { box-sizing: border-box; margin: 0; padding: 0; }\n' +
+          '  body { font-family: "Microsoft YaHei", "SimHei", sans-serif; }\n' +
+          '  @page { size: ' + paperWidthMm + 'mm ' + heightMm + 'mm; margin: 0; }\n' +
+          '</style>\n' +
+          '</head>\n' +
+          '<body>' + bodyHtml + '</body>\n' +
+          '</html>';
+      }
+
+      // 标记引擎就绪
+      window.__printEngineReady = true;
+
+    })();
+  </script>
+</body>
+</html>

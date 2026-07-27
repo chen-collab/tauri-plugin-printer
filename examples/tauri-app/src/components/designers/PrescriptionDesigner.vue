@@ -1,6 +1,6 @@
 ﻿<script setup>
 import { ref, onMounted, nextTick } from "vue";
-import { getPrinters, printHtml } from "tauri-plugin-printer-v2";
+import { getPrinters, printTemplate } from "tauri-plugin-printer-v2";
 const { hiprint, defaultElementTypeProvider } = window["vue-plugin-hiprint"];
 
 const PAPER_WIDTH = 148;
@@ -87,54 +87,20 @@ const initDesigner = () => {
   } catch (e) { statusMsg.value = "初始化失败: " + e.message; console.error(e); }
 };
 
-// 图片转 Base64（隐藏 WebView 窗口无法加载网络/鉴权图片）
-const ensureImagesBase64 = async (html) => {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  const imgs = doc.querySelectorAll("img");
-  if (imgs.length === 0) return html;
-  const toBase64 = (src) => new Promise((resolve) => {
-    if (src.startsWith("data:") || src.startsWith("blob:")) { resolve(src); return; }
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        canvas.getContext("2d").drawImage(img, 0, 0);
-        resolve(canvas.toDataURL("image/png"));
-      } catch { resolve(src); }
-    };
-    img.onerror = () => resolve(src);
-    img.src = src;
-  });
-  const promises = Array.from(imgs).map(async (img) => {
-    const src = img.getAttribute("src");
-    if (!src) return;
-    img.setAttribute("src", await toBase64(src));
-  });
-  await Promise.all(promises);
-  return doc.documentElement.outerHTML;
-};
-
 const handlePrint = async () => {
   if (!hiprintTemplate || isPrinting.value) return;
-  isPrinting.value = true; statusMsg.value = "正在生成打印内容...";
+  isPrinting.value = true; statusMsg.value = "正在获取模板...";
   try {
-    const htmlResult = hiprintTemplate.getHtml(rxData);
-    if (!htmlResult || !htmlResult.length) throw new Error("请先添加打印元素");
-    const htmlContent = htmlResult.html();
-    let fullHtml = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n<meta charset="UTF-8">\n<style>\n  * { box-sizing: border-box; margin: 0; padding: 0; }\n  body { font-family: "Microsoft YaHei", "SimHei", sans-serif; }\n  @page { size: ' + PAPER_WIDTH + 'mm ' + PAPER_HEIGHT + 'mm; margin: 0; }\n</style>\n</head>\n<body>' + htmlContent + '</body>\n</html>';
-    statusMsg.value = "正在处理图片资源...";
-    fullHtml = await ensureImagesBase64(fullHtml);
-    statusMsg.value = "正在发送到打印机...";
-    const result = await printHtml({
-      html: fullHtml, pageWidth: PAPER_WIDTH, pageHeight: PAPER_HEIGHT,
+    const templateJson = JSON.stringify(hiprintTemplate.getJson());
+    const dataJson = JSON.stringify(rxData);
+    statusMsg.value = "正在发送到打印引擎...";
+    const result = await printTemplate({
+      template: templateJson,
+      data: dataJson,
+      paperWidth: PAPER_WIDTH,
+      paperHeight: PAPER_HEIGHT,
       orientation: "Portrait",
-      margin: { top: 0, bottom: 0, left: 0, right: 0, unit: "mm" },
       printerId: selectedPrinter.value || undefined,
-      removeAfterPrint: true,
       copies: copies.value,
       grayscale: grayscale.value,
     });

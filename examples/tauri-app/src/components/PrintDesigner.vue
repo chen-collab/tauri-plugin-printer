@@ -1,6 +1,6 @@
 ﻿<script setup>
 import { ref, onMounted, nextTick, computed } from "vue";
-import { getPrinters, printHtml } from "tauri-plugin-printer-v2";
+import { getPrinters, printTemplate } from "tauri-plugin-printer-v2";
 // vue-plugin-hiprint 已在 index.html 中以全局脚本加载，直接使用 window.hiprint
 const { hiprint, defaultElementTypeProvider } = window["vue-plugin-hiprint"];
 import panel from "./panel.js";
@@ -132,81 +132,27 @@ const changeScale = (big) => {
   }
 };
 
-// ========== 图片转 Base64（隐藏 WebView 窗口无法加载网络/鉴权图片） ==========
-const ensureImagesBase64 = async (html) => {
-  // 用 DOMParser 解析 HTML，收集所有 img
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
-  const imgs = doc.querySelectorAll('img');
-  if (imgs.length === 0) return html;
-
-  // 逐个加载并转 base64
-  const toBase64 = (src) => new Promise((resolve, reject) => {
-    // 已经是 base64 或 data: URI，直接返回
-    if (src.startsWith('data:') || src.startsWith('blob:')) {
-      resolve(src);
-      return;
-    }
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
-      } catch (e) {
-        // 跨域等失败，保留原图
-        resolve(src);
-      }
-    };
-    img.onerror = () => resolve(src); // 加载失败保留原图
-    img.src = src;
-  });
-
-  // 替换所有 img 的 src
-  const promises = Array.from(imgs).map(async (img) => {
-    const src = img.getAttribute('src');
-    if (!src) return;
-    const base64 = await toBase64(src);
-    img.setAttribute('src', base64);
-  });
-  await Promise.all(promises);
-
-  return doc.documentElement.outerHTML;
-};
-
-// ========== 打印（接入 Tauri 插件） ==========
+// ========== 模板打印（三层架构：前端传数据+模板，Rust 调度，引擎渲染） ==========
 const handlePrint = async () => {
   if (!hiprintTemplate || isPrinting.value) return;
   isPrinting.value = true;
-  statusMsg.value = "正在生成打印内容...";
+  statusMsg.value = "正在获取模板...";
   try {
     const paper = curPaper.value;
-    // 从 hiprint 获取渲染后的 HTML（返回 jQuery 对象，包裹 <div class="hiprint-printTemplate">）
-    const htmlResult = hiprintTemplate.getHtml(printData);
-    if (!htmlResult || !htmlResult.length) throw new Error("请先添加打印元素");
-    // 获取面板渲染的 HTML 内容（jQuery 对象的 .html() 返回内部 HTML 字符串）
-    const htmlContent = htmlResult.html();
-    // 构建完整 HTML 文档
-    let fullHtml = "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n<style>\n  * { box-sizing: border-box; margin: 0; padding: 0; }\n  body { font-family: \"Microsoft YaHei\", \"SimHei\", sans-serif; }\n  @page { size: " + paper.width + "mm " + paper.height + "mm; margin: 0; }\n</style>\n</head><body>" + htmlContent + "</body>\n</html>";
+    // 获取模板 JSON（纯数据，不包含渲染结果）
+    const templateJson = JSON.stringify(hiprintTemplate.getJson());
+    // 打印数据 JSON
+    const dataJson = JSON.stringify(printData);
 
-    // 图片转 Base64（隐藏窗口无法加载网络/鉴权图片）
-    statusMsg.value = "正在处理图片资源...";
-    fullHtml = await ensureImagesBase64(fullHtml);
-
-    statusMsg.value = "正在发送到打印机...";
-    // 调用 Tauri 原生打印
-    const result = await printHtml({
-      html: fullHtml,
-      pageWidth: paper.width,
-      pageHeight: paper.height,
+    statusMsg.value = "正在发送到打印引擎...";
+    // 调用模板打印 API（Rust 端原子操作：创建窗口→渲染→打印→销毁）
+    const result = await printTemplate({
+      template: templateJson,
+      data: dataJson,
+      paperWidth: paper.width,
+      paperHeight: paper.height,
       orientation: paper.width > paper.height ? "Landscape" : "Portrait",
-      margin: { top: 0, bottom: 0, left: 0, right: 0, unit: "mm" },
       printerId: selectedPrinter.value || undefined,
-      removeAfterPrint: true,
       copies: printCopies.value,
       grayscale: printGrayscale.value,
     });
