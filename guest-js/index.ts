@@ -69,6 +69,28 @@ export interface PrintHtmlOptions {
   copies?: number
 }
 
+/** 模板打印选项（三层架构：前端传数据+模板，Rust 调度，引擎渲染） */
+export interface PrintTemplateOptions {
+  /** hiprint 模板 JSON 字符串 */
+  template: string
+  /** 打印数据 JSON 字符串 */
+  data: string
+  /** 纸张宽度（mm） */
+  paperWidth: number
+  /** 纸张高度（mm），不传或为 0 表示由内容高度自适应 */
+  paperHeight?: number
+  /** 方向：Portrait, Landscape */
+  orientation?: string
+  /** 打印机 ID（名称），为空使用默认打印机 */
+  printerId?: string
+  /** 打印份数（默认 1） */
+  copies?: number
+  /** 是否灰度打印 */
+  grayscale?: boolean
+  /** 渲染超时（毫秒），默认 15000 */
+  renderTimeoutMs?: number
+}
+
 /** 打印边距 */
 export interface PrintMargin {
   top: number
@@ -112,6 +134,20 @@ export async function printPdf(options: PrintPdfOptions): Promise<string> {
 /** 打印 HTML 内容 */
 export async function printHtml(options: PrintHtmlOptions): Promise<string> {
   return await invoke<string>('plugin:printer-v2|print_html', {
+    options: options,
+  })
+}
+
+/**
+ * 模板打印（三层架构推荐用法）
+ *
+ * 前端只传 { 模板 JSON, 数据 JSON, 纸张参数, 打印机配置 }，
+ * Rust 端原子操作：创建隐藏窗口 → 加载渲染引擎 → hiprint 渲染 + 图片等待 + 高度计算 → WebView2 静默打印 → 销毁窗口。
+ *
+ * 前端无需引入 hiprint，无需关心渲染、图片加载、纸张高度计算等底层细节。
+ */
+export async function printTemplate(options: PrintTemplateOptions): Promise<string> {
+  return await invoke<string>('plugin:printer-v2|print_template', {
     options: options,
   })
 }
