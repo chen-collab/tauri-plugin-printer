@@ -137,3 +137,4 @@ examples/vue-plugin-hiprint-main/src/utils/index.js
 
 # Exclude large binary from git and crates.io
 tauri-plugin-printer-v2-0.4.1.tgz
+code.md

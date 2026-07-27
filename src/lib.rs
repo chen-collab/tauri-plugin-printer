@@ -1,7 +1,11 @@
-﻿mod declare;
+mod declare;
 mod fsys;
 #[cfg(target_os = "windows")]
+pub mod print_service;
+#[cfg(target_os = "windows")]
 mod spooler;
+#[cfg(target_os = "windows")]
+mod webview2_print;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -10,8 +14,8 @@ use tauri::{
     Manager, Runtime,
 };
 
+use crate::declare::{JobInfo, PrintHtmlOptions, PrintOptions, PrinterInfo};
 pub use crate::models::*;
-use crate::declare::{PrintHtmlOptions, PrintOptions, PrinterInfo, JobInfo};
 
 #[cfg(desktop)]
 mod desktop;
@@ -36,8 +40,11 @@ async fn ping<R: Runtime>(app: tauri::AppHandle<R>, payload: PingRequest) -> Res
 
 /// 打印 HTML 内容
 #[tauri::command(rename_all = "camelCase")]
-async fn print_html<R: Runtime>(app: tauri::AppHandle<R>, options: PrintHtmlOptions) -> Result<String> {
-    app.printer().print_html(options)
+async fn print_html<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    options: PrintHtmlOptions,
+) -> Result<String> {
+    app.printer().print_html(options).await
 }
 
 /// 创建临时文件
@@ -68,7 +75,10 @@ async fn get_printers<R: Runtime>(app: tauri::AppHandle<R>) -> Result<Vec<Printe
 
 /// 按名称获取打印机
 #[tauri::command(rename_all = "camelCase")]
-async fn get_printers_by_name<R: Runtime>(app: tauri::AppHandle<R>, printername: String) -> Result<PrinterInfo> {
+async fn get_printers_by_name<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    printername: String,
+) -> Result<PrinterInfo> {
     app.printer().get_printer_by_name(&printername)
 }
 
@@ -81,48 +91,89 @@ async fn print_pdf<R: Runtime>(
     printer_setting: String,
     remove_after_print: bool,
 ) -> Result<String> {
-    let options = PrintOptions { id, path, printer_setting, remove_after_print };
-    app.printer().print_pdf(options)
+    let options = PrintOptions {
+        id,
+        path,
+        printer_setting,
+        remove_after_print,
+        orientation: None,
+        grayscale: None,
+        copies: None,
+    };
+    app.printer().print_pdf(options).await
 }
 
 /// 获取打印任务列表
 #[tauri::command(rename_all = "camelCase")]
-async fn get_jobs<R: Runtime>(app: tauri::AppHandle<R>, printername: String) -> Result<Vec<JobInfo>> {
+async fn get_jobs<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    printername: String,
+) -> Result<Vec<JobInfo>> {
     app.printer().get_jobs(&printername)
 }
 
 /// 按 ID 获取打印任务
 #[tauri::command(rename_all = "camelCase")]
-async fn get_jobs_by_id<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<JobInfo> {
-    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+async fn get_jobs_by_id<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    printername: String,
+    jobid: String,
+) -> Result<JobInfo> {
+    let jid: u32 = jobid
+        .parse()
+        .map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
     app.printer().get_job_by_id(&printername, jid)
 }
 
 /// 恢复打印任务
 #[tauri::command(rename_all = "camelCase")]
-async fn resume_job<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<()> {
-    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+async fn resume_job<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    printername: String,
+    jobid: String,
+) -> Result<()> {
+    let jid: u32 = jobid
+        .parse()
+        .map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
     app.printer().resume_job(&printername, jid)
 }
 
 /// 重启打印任务
 #[tauri::command(rename_all = "camelCase")]
-async fn restart_job<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<()> {
-    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+async fn restart_job<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    printername: String,
+    jobid: String,
+) -> Result<()> {
+    let jid: u32 = jobid
+        .parse()
+        .map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
     app.printer().restart_job(&printername, jid)
 }
 
 /// 暂停打印任务
 #[tauri::command(rename_all = "camelCase")]
-async fn pause_job<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<()> {
-    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+async fn pause_job<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    printername: String,
+    jobid: String,
+) -> Result<()> {
+    let jid: u32 = jobid
+        .parse()
+        .map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
     app.printer().pause_job(&printername, jid)
 }
 
 /// 删除打印任务
 #[tauri::command(rename_all = "camelCase")]
-async fn remove_job<R: Runtime>(app: tauri::AppHandle<R>, printername: String, jobid: String) -> Result<()> {
-    let jid: u32 = jobid.parse().map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
+async fn remove_job<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    printername: String,
+    jobid: String,
+) -> Result<()> {
+    let jid: u32 = jobid
+        .parse()
+        .map_err(|_| Error::InvalidInput(format!("无效的 jobid: {}", jobid)))?;
     app.printer().remove_job(&printername, jid)
 }
 
@@ -155,7 +206,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             pause_job,
             remove_job
         ])
-.setup(|app, api| {
+        .setup(|app, api| {
             #[cfg(desktop)]
             let printer = desktop::init(app, api)?;
             #[cfg(mobile)]

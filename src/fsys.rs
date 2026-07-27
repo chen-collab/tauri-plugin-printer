@@ -1,8 +1,8 @@
-use std::fs::{File, remove_file as rmf};
+use std::fs::{remove_file as rmf, File};
 use std::io::Write;
 use std::path::Path;
 
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 
 use crate::Error;
 
@@ -10,11 +10,7 @@ use crate::Error;
 pub fn sanitize_filename(name: &str) -> Result<String, Error> {
     let path = Path::new(name);
     // 拒绝包含路径分隔符、绝对路径、父目录引用
-    if path.is_absolute()
-        || name.contains('/')
-        || name.contains('\\')
-        || name.contains("..")
-    {
+    if path.is_absolute() || name.contains('/') || name.contains('\\') || name.contains("..") {
         return Err(Error::InvalidInput(format!("文件名包含非法字符: {}", name)));
     }
     // 提取纯文件名
@@ -32,7 +28,7 @@ pub fn create_file_from_base64(base64_string: &str, file_path: &str) -> Result<(
         .map_err(|e| Error::Base64(format!("{}", e)))?;
 
     let path = Path::new(file_path);
-    let mut file = File::create(&path)?;
+    let mut file = File::create(path)?;
     file.write_all(&buffer)?;
     Ok(())
 }

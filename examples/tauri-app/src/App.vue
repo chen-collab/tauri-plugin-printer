@@ -35,6 +35,10 @@ const tempFileName = ref('')
 const tempFilePath = ref('')
 const isPrinting = ref(false)
 
+// PDF 打印选项
+const pdfCopies = ref(1)
+const pdfGrayscale = ref(false)
+
 const MEDICAL_TEMPLATES = [
   { id: 1, name: 'A4 处方笺', icon: '📋', paperSize: 'A4 纵向', options: { pageSize: 'A4', orientation: 'Portrait', margin: { top: 10, bottom: 10, left: 10, right: 10, unit: 'mm' } } },
   { id: 2, name: 'A5 检验报告', icon: '🔬', paperSize: 'A5', options: { pageSize: 'A5', margin: { top: 0, bottom: 0, left: 0, right: 0, unit: 'mm' } } },
@@ -112,12 +116,19 @@ const handleSelectPdfFile = async () => {
 
 const handlePrintSpecificPdf = async () => {
   if (!pdfFilePath.value.trim()) { updateResponse('请先选择要打印的PDF文件'); return }
-  updateResponse(`开始打印PDF文件: ${selectedFileName.value || pdfFilePath.value}`)
+  updateResponse(`开始打印PDF文件: ${selectedFileName.value || pdfFilePath.value} (${pdfCopies.value}份${pdfGrayscale.value ? ', 灰度' : ''})`)
   const currentPrinter = selectedPrinter.value || printerName.value.trim()
   if (!currentPrinter) { updateResponse('警告: 未指定打印机，将使用默认打印机') }
   try {
     const printId = `pdf_print_${Date.now()}`
-    const result = await printPdf({ id: printId, path: pdfFilePath.value, printerSetting: currentPrinter || 'default', removeAfterPrint: false })
+    const result = await printPdf({
+      id: printId,
+      path: pdfFilePath.value,
+      printerSetting: currentPrinter || 'default',
+      removeAfterPrint: false,
+      copies: pdfCopies.value,
+      grayscale: pdfGrayscale.value,
+    })
     updateResponse(`PDF打印任务已成功提交: ${result}`)
   } catch (error) { updateResponse(`打印PDF失败: ${error.message || error}`) }
 }
@@ -184,12 +195,46 @@ const getPrintOptions = (overrides = {}) => {
   return { printerId: printer, removeAfterPrint: true, ...overrides }
 }
 
+// 图片转 Base64（隐藏 WebView 窗口无法加载网络/鉴权图片）
+const ensureImagesBase64 = async (html) => {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const imgs = doc.querySelectorAll('img')
+  if (imgs.length === 0) return html
+  const toBase64 = (src) => new Promise((resolve) => {
+    if (src.startsWith('data:') || src.startsWith('blob:')) { resolve(src); return }
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        canvas.getContext('2d').drawImage(img, 0, 0)
+        resolve(canvas.toDataURL('image/png'))
+      } catch { resolve(src) }
+    }
+    img.onerror = () => resolve(src)
+    img.src = src
+  })
+  const promises = Array.from(imgs).map(async (img) => {
+    const src = img.getAttribute('src')
+    if (!src) return
+    img.setAttribute('src', await toBase64(src))
+  })
+  await Promise.all(promises)
+  return doc.documentElement.outerHTML
+}
+
 const handlePrintTemplate = async (template) => {
   if (isPrinting.value) return
   isPrinting.value = true
   updateResponse(`开始打印 ${template.name}...`)
   try {
-    const html = getTemplateHtml(template.id)
+    let html = getTemplateHtml(template.id)
+    html = await ensureImagesBase64(html)
+    console.log('html', html)
+    console.log('getPrintOptions(template.options)', getPrintOptions(template.options))
     const result = await printHtml({ html, ...getPrintOptions(template.options) })
     updateResponse(`${template.name} 打印成功: ${result}`)
   } catch (error) { updateResponse(`${template.name} 打印失败: ${error}`) }
@@ -325,6 +370,19 @@ const getTemplateHtml = (id) => {
               <div class="file-details">
                 <div class="file-name">{{ selectedFileName }}</div>
                 <div class="file-path">{{ pdfFilePath }}</div>
+              </div>
+            </div>
+            <div class="pdf-options">
+              <div class="option-row">
+                <label class="option-label">打印份数</label>
+                <input v-model.number="pdfCopies" type="number" min="1" max="99" class="option-input" />
+              </div>
+              <div class="option-row">
+                <label class="option-label">灰度打印</label>
+                <label class="switch">
+                  <input v-model="pdfGrayscale" type="checkbox" />
+                  <span class="slider"></span>
+                </label>
               </div>
             </div>
             <button @click="handlePrintSpecificPdf" class="action-button pdf-print-button" :disabled="!pdfFilePath">打印选中的PDF</button>
@@ -480,6 +538,18 @@ header p { color: #7f8c8d; font-size: 1.1rem; }
 
 .pdf-section { display: flex; flex-direction: column; gap: 1rem; }
 .selected-file-info { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px; border: 2px dashed #dee2e6; }
+.pdf-options { background: #f8f9fa; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.option-row { display: flex; align-items: center; justify-content: space-between; }
+.option-label { font-size: 13px; font-weight: 500; color: #495057; }
+.option-input { width: 80px; padding: 6px 10px; border: 1px solid #dee2e6; border-radius: 6px; font-size: 13px; text-align: center; outline: none; }
+.option-input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: 0.3s; border-radius: 24px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
+.switch input:checked + .slider { background-color: #667eea; }
+.switch input:checked + .slider:before { transform: translateX(20px); }
 .file-icon { font-size: 2rem; }
 .file-details { flex: 1; min-width: 0; }
 .file-name { font-weight: 600; color: #2c3e50; margin-bottom: 0.25rem; word-break: break-word; }

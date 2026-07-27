@@ -47,6 +47,12 @@ pub struct PrintOptions {
     /// 打印机名称（空字符串表示使用默认打印机）
     pub printer_setting: String,
     pub remove_after_print: bool,
+    /// 方向：portrait, landscape（可选，默认由 PDF/驱动决定）
+    pub orientation: Option<String>,
+    /// 是否灰度打印（可选）
+    pub grayscale: Option<bool>,
+    /// 打印份数（可选，默认 1）
+    pub copies: Option<u32>,
 }
 
 /// HTML 打印选项

@@ -41,6 +41,12 @@ export interface PrintPdfOptions {
   path: string
   printerSetting: string
   removeAfterPrint: boolean
+  /** 打印份数（默认 1） */
+  copies?: number
+  /** 是否灰度打印 */
+  grayscale?: boolean
+  /** 方向：Portrait, Landscape（可选，默认 PDF 自带尺寸） */
+  orientation?: string
 }
 
 /** HTML 打印选项 */

@@ -34,6 +34,8 @@ const printerList = ref([]);
 const selectedPrinter = ref("");
 const customWidth = ref(100);
 const customHeight = ref(150);
+const printCopies = ref(1);
+const printGrayscale = ref(false);
 
 let hiprintTemplate = null;
 
@@ -130,6 +132,52 @@ const changeScale = (big) => {
   }
 };
 
+// ========== 图片转 Base64（隐藏 WebView 窗口无法加载网络/鉴权图片） ==========
+const ensureImagesBase64 = async (html) => {
+  // 用 DOMParser 解析 HTML，收集所有 img
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const imgs = doc.querySelectorAll('img');
+  if (imgs.length === 0) return html;
+
+  // 逐个加载并转 base64
+  const toBase64 = (src) => new Promise((resolve, reject) => {
+    // 已经是 base64 或 data: URI，直接返回
+    if (src.startsWith('data:') || src.startsWith('blob:')) {
+      resolve(src);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) {
+        // 跨域等失败，保留原图
+        resolve(src);
+      }
+    };
+    img.onerror = () => resolve(src); // 加载失败保留原图
+    img.src = src;
+  });
+
+  // 替换所有 img 的 src
+  const promises = Array.from(imgs).map(async (img) => {
+    const src = img.getAttribute('src');
+    if (!src) return;
+    const base64 = await toBase64(src);
+    img.setAttribute('src', base64);
+  });
+  await Promise.all(promises);
+
+  return doc.documentElement.outerHTML;
+};
+
 // ========== 打印（接入 Tauri 插件） ==========
 const handlePrint = async () => {
   if (!hiprintTemplate || isPrinting.value) return;
@@ -137,15 +185,20 @@ const handlePrint = async () => {
   statusMsg.value = "正在生成打印内容...";
   try {
     const paper = curPaper.value;
-// 从 hiprint 获取渲染后的 HTML（返回 jQuery 对象，包裹 <div class="hiprint-printTemplate">）
+    // 从 hiprint 获取渲染后的 HTML（返回 jQuery 对象，包裹 <div class="hiprint-printTemplate">）
     const htmlResult = hiprintTemplate.getHtml(printData);
     if (!htmlResult || !htmlResult.length) throw new Error("请先添加打印元素");
     // 获取面板渲染的 HTML 内容（jQuery 对象的 .html() 返回内部 HTML 字符串）
     const htmlContent = htmlResult.html();
     // 构建完整 HTML 文档
-    const fullHtml = "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n<style>\n  * { box-sizing: border-box; margin: 0; padding: 0; }\n  body { font-family: \"Microsoft YaHei\", \"SimHei\", sans-serif; }\n  @page { size: " + paper.width + "mm " + paper.height + "mm; margin: 0; }\n</style>\n</head>\n<body>" + htmlContent + "</body>\n</html>";
+    let fullHtml = "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n<style>\n  * { box-sizing: border-box; margin: 0; padding: 0; }\n  body { font-family: \"Microsoft YaHei\", \"SimHei\", sans-serif; }\n  @page { size: " + paper.width + "mm " + paper.height + "mm; margin: 0; }\n</style>\n</head><body>" + htmlContent + "</body>\n</html>";
+
+    // 图片转 Base64（隐藏窗口无法加载网络/鉴权图片）
+    statusMsg.value = "正在处理图片资源...";
+    fullHtml = await ensureImagesBase64(fullHtml);
+
     statusMsg.value = "正在发送到打印机...";
-// 调用 Tauri 原生打印
+    // 调用 Tauri 原生打印
     const result = await printHtml({
       html: fullHtml,
       pageWidth: paper.width,
@@ -154,6 +207,8 @@ const handlePrint = async () => {
       margin: { top: 0, bottom: 0, left: 0, right: 0, unit: "mm" },
       printerId: selectedPrinter.value || undefined,
       removeAfterPrint: true,
+      copies: printCopies.value,
+      grayscale: printGrayscale.value,
     });
     statusMsg.value = "打印成功: " + result;
   } catch (error) {
@@ -286,6 +341,23 @@ onMounted(() => {
           <option value="" disabled>请选择打印机</option>
           <option v-for="p in printerList" :key="p.name" :value="p.name">{{ p.name }}</option>
         </select>
+      </div>
+
+      <!-- 打印设置 -->
+      <div class="toolbar-group">
+        <span class="toolbar-label">份数:</span>
+        <input
+          v-model.number="printCopies"
+          type="number"
+          min="1"
+          max="999"
+          class="copies-input"
+          title="打印份数"
+        />
+        <label class="grayscale-check" title="灰度打印">
+          <input type="checkbox" v-model="printGrayscale" />
+          <span>灰度</span>
+        </label>
       </div>
 
       <!-- 缩放 -->
@@ -469,6 +541,24 @@ onMounted(() => {
 }
 .printer-select:hover { border-color: #667eea; }
 .printer-select:focus { border-color: #667eea; box-shadow: 0 0 0 2px rgba(102,126,234,0.15); }
+
+.copies-input {
+  width: 50px; padding: 3px 4px; border: 1px solid #d9d9d9; border-radius: 4px;
+  font-size: 12px; text-align: center; outline: none;
+  transition: border-color 0.15s;
+  -moz-appearance: textfield;
+}
+.copies-input::-webkit-inner-spin-button,
+.copies-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.copies-input:hover { border-color: #667eea; }
+.copies-input:focus { border-color: #667eea; box-shadow: 0 0 0 2px rgba(102,126,234,0.15); }
+
+.grayscale-check {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 12px; color: #555; cursor: pointer; user-select: none;
+  margin-left: 4px;
+}
+.grayscale-check input { cursor: pointer; }
 
 .custom-size-inputs {
   display: inline-flex; align-items: center; gap: 2px;

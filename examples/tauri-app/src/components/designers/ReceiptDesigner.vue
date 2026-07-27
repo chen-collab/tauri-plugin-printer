@@ -11,6 +11,8 @@ const statusMsg = ref("初始化中...");
 const printerList = ref([]);
 const selectedPrinter = ref("");
 const medicineCount = ref(4);
+const copies = ref(1);
+const grayscale = ref(false);
 
 let hiprintTemplate = null;
 
@@ -96,6 +98,37 @@ const initDesigner = () => {
   } catch (e) { statusMsg.value = "初始化失败: " + e.message; console.error(e); }
 };
 
+// 图片转 Base64（隐藏 WebView 窗口无法加载网络/鉴权图片）
+const ensureImagesBase64 = async (html) => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const imgs = doc.querySelectorAll("img");
+  if (imgs.length === 0) return html;
+  const toBase64 = (src) => new Promise((resolve) => {
+    if (src.startsWith("data:") || src.startsWith("blob:")) { resolve(src); return; }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext("2d").drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      } catch { resolve(src); }
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
+  const promises = Array.from(imgs).map(async (img) => {
+    const src = img.getAttribute("src");
+    if (!src) return;
+    img.setAttribute("src", await toBase64(src));
+  });
+  await Promise.all(promises);
+  return doc.documentElement.outerHTML;
+};
+
 const handlePrint = async () => {
   if (!hiprintTemplate || isPrinting.value) return;
   isPrinting.value = true; statusMsg.value = "正在生成打印内容...";
@@ -105,7 +138,9 @@ const handlePrint = async () => {
     const htmlResult = hiprintTemplate.getHtml(data);
     if (!htmlResult || !htmlResult.length) throw new Error("请先添加打印元素");
     const htmlContent = htmlResult.html();
-    const fullHtml = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n<meta charset="UTF-8">\n<style>\n  * { box-sizing: border-box; margin: 0; padding: 0; }\n  body { font-family: "Microsoft YaHei", "SimHei", sans-serif; }\n  @page { size: ' + PAPER_WIDTH + 'mm ' + height + 'mm; margin: 0; }\n</style>\n</head>\n<body>' + htmlContent + '</body>\n</html>';
+    let fullHtml = '<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n<meta charset="UTF-8">\n<style>\n  * { box-sizing: border-box; margin: 0; padding: 0; }\n  body { font-family: "Microsoft YaHei", "SimHei", sans-serif; }\n  @page { size: ' + PAPER_WIDTH + 'mm ' + height + 'mm; margin: 0; }\n</style>\n</head>\n<body>' + htmlContent + '</body>\n</html>';
+    statusMsg.value = "正在处理图片资源...";
+    fullHtml = await ensureImagesBase64(fullHtml);
     statusMsg.value = "正在发送到打印机...";
     const result = await printHtml({
       html: fullHtml,
@@ -114,6 +149,8 @@ const handlePrint = async () => {
       margin: { top: 0, bottom: 0, left: 0, right: 0, unit: "mm" },
       printerId: selectedPrinter.value || undefined,
       removeAfterPrint: true,
+      copies: copies.value,
+      grayscale: grayscale.value,
     });
     statusMsg.value = "打印成功: " + result;
   } catch (error) { statusMsg.value = "打印失败: " + (error.message || error); }
@@ -151,6 +188,16 @@ onMounted(() => { nextTick(() => { initDesigner(); }); loadPrinters(); });
         <span class="toolbar-label">药品:</span>
         <input v-model.number="medicineCount" type="number" min="1" max="100" class="count-input" @input="medicineCount = Math.max(1, Math.min(100, medicineCount || 1))" />
         <span class="count-label">个</span>
+      </div>
+      <div class="toolbar-group">
+        <span class="toolbar-label">份数:</span>
+        <input v-model.number="copies" type="number" min="1" max="99" class="count-input" />
+      </div>
+      <div class="toolbar-group">
+        <label class="grayscale-toggle">
+          <input v-model="grayscale" type="checkbox" />
+          <span>灰度</span>
+        </label>
       </div>
       <div class="toolbar-group">
         <span class="toolbar-label">打印机:</span>
@@ -215,6 +262,8 @@ onMounted(() => { nextTick(() => { initDesigner(); }); loadPrinters(); });
 .count-input:hover { border-color: #667eea; }
 .count-input:focus { border-color: #667eea; box-shadow: 0 0 0 2px rgba(102,126,234,0.15); }
 .count-label { font-size: 11px; color: #999; }
+.grayscale-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #555; cursor: pointer; user-select: none; }
+.grayscale-toggle input { cursor: pointer; }
 .action-btn { padding: 5px 14px; border: 1px solid #d9d9d9; border-radius: 4px; background: #fff; font-size: 13px; cursor: pointer; transition: all 0.15s; }
 .action-btn:hover { border-color: #667eea; color: #667eea; }
 .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
