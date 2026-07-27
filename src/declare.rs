@@ -89,3 +89,27 @@ pub struct PrintMargin {
     /// 单位：mm, cm, inch
     pub unit: Option<String>,
 }
+
+/// 模板打印选项（三层架构：前端传数据+模板+打印机配置，Rust 原子调度，引擎负责渲染）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrintTemplateOptions {
+    /// hiprint 模板 JSON 字符串
+    pub template: String,
+    /// 打印数据 JSON 字符串
+    pub data: String,
+    /// 纸张宽度（mm）
+    pub paper_width: f64,
+    /// 纸张高度（mm），为 0 或负表示由内容高度自适应
+    pub paper_height: Option<f64>,
+    /// 方向：portrait, landscape
+    pub orientation: Option<String>,
+    /// 打印机 ID（名称），为空使用默认打印机
+    pub printer_id: Option<String>,
+    /// 打印份数（默认 1）
+    pub copies: Option<u32>,
+    /// 是否灰度打印
+    pub grayscale: Option<bool>,
+    /// 渲染超时（毫秒），默认 10000
+    pub render_timeout_ms: Option<u64>,
+}

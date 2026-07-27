@@ -1,6 +1,8 @@
 mod declare;
 mod fsys;
 #[cfg(target_os = "windows")]
+pub mod print_engine;
+#[cfg(target_os = "windows")]
 pub mod print_service;
 #[cfg(target_os = "windows")]
 mod spooler;
@@ -14,7 +16,7 @@ use tauri::{
     Manager, Runtime,
 };
 
-use crate::declare::{JobInfo, PrintHtmlOptions, PrintOptions, PrinterInfo};
+use crate::declare::{JobInfo, PrintHtmlOptions, PrintOptions, PrintTemplateOptions, PrinterInfo};
 pub use crate::models::*;
 
 #[cfg(desktop)]
@@ -101,6 +103,34 @@ async fn print_pdf<R: Runtime>(
         copies: None,
     };
     app.printer().print_pdf(options).await
+}
+
+/// 模板打印（三层架构：前端传数据+模板，Rust 原子调度，引擎负责渲染）
+#[tauri::command(rename_all = "camelCase")]
+async fn print_template<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    options: PrintTemplateOptions,
+) -> Result<String> {
+    app.printer().print_template(options).await
+}
+
+/// 渲染完成回调（内部 command，由 print-render.html 引擎页面调用）
+#[tauri::command(rename_all = "camelCase")]
+async fn print_render_done<R: Runtime>(
+    window: tauri::WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
+    html: String,
+    content_height_px: f64,
+) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        crate::print_engine::print_render_done(window, app, html, content_height_px).await
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (window, app, html, content_height_px);
+        Err(crate::Error::UnsupportedPlatform)
+    }
 }
 
 /// 获取打印任务列表
@@ -199,6 +229,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             get_printers,
             get_printers_by_name,
             print_pdf,
+            print_template,
+            print_render_done,
             get_jobs,
             get_jobs_by_id,
             resume_job,
@@ -213,6 +245,11 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let printer = mobile::init(app, api)?;
 
             app.manage(printer);
+
+            // 注册渲染完成回调注册表（用于模板打印引擎的回调路由）
+            #[cfg(target_os = "windows")]
+            app.manage(crate::print_engine::RenderRegistry::new());
+
             Ok(())
         })
         .build()

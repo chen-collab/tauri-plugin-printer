@@ -21,6 +21,8 @@ pub enum Error {
     PrintTimeout(String),
     #[error("WebView2 错误: {0}")]
     WebView2(String),
+    #[error("渲染引擎错误: {0}")]
+    RenderEngine(String),
 }
 
 impl Serialize for Error {

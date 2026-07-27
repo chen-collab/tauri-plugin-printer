@@ -4,7 +4,7 @@ use tauri::{
     AppHandle, Runtime,
 };
 
-use crate::declare::{JobInfo, PrintHtmlOptions, PrintOptions, PrinterInfo};
+use crate::declare::{JobInfo, PrintHtmlOptions, PrintOptions, PrintTemplateOptions, PrinterInfo};
 use crate::models::*;
 
 #[cfg(target_os = "ios")]
@@ -45,6 +45,13 @@ impl<R: Runtime> Printer<R> {
     }
 
     pub fn print_html(&self, _options: PrintHtmlOptions) -> crate::Result<String> {
+        Err(crate::Error::UnsupportedPlatform)
+    }
+
+    pub fn print_template(
+        &self,
+        _options: PrintTemplateOptions,
+    ) -> crate::Result<String> {
         Err(crate::Error::UnsupportedPlatform)
     }
 

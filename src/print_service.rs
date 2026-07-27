@@ -114,7 +114,7 @@ const WINDOW_LABEL_PREFIX: &str = "__print_silent_";
 
 // ===== 就绪策略 =====
 
-enum ReadyStrategy {
+pub(crate) enum ReadyStrategy {
     /// 等待 NavigationCompleted 事件（带超时，毫秒）
     NavigationCompleted(u64),
     /// 固定延时等待（毫秒）
@@ -148,7 +148,7 @@ async fn print_via_webview<R: Runtime>(
 
 // ===== 创建隐藏窗口 =====
 
-fn create_hidden_window<R: Runtime>(
+pub(crate) fn create_hidden_window<R: Runtime>(
     app: &AppHandle<R>,
     label: &str,
 ) -> Result<tauri::WebviewWindow<R>, Error> {
@@ -164,7 +164,7 @@ fn create_hidden_window<R: Runtime>(
     Ok(window)
 }
 
-fn unique_window_label() -> String {
+pub(crate) fn unique_window_label() -> String {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -272,7 +272,7 @@ async fn wait_for_navigation_completed<R: Runtime>(
 
 // ===== 触发打印 =====
 
-async fn do_print<R: Runtime>(
+pub(crate) async fn do_print<R: Runtime>(
     webview: &tauri::WebviewWindow<R>,
     settings_data: PrintSettingsData,
 ) -> Result<PrintOutcome, Error> {

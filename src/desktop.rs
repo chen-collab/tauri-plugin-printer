@@ -1,7 +1,7 @@
 use serde::de::DeserializeOwned;
 use tauri::{plugin::PluginApi, AppHandle, Runtime};
 
-use crate::declare::{JobInfo, PrintHtmlOptions, PrintOptions, PrinterInfo};
+use crate::declare::{JobInfo, PrintHtmlOptions, PrintOptions, PrintTemplateOptions, PrinterInfo};
 use crate::models::*;
 
 /// 打印机 API 访问入口
@@ -62,6 +62,21 @@ impl<R: Runtime> Printer<R> {
         #[cfg(target_os = "windows")]
         {
             crate::print_service::print_html(&self.app, options).await
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Err(crate::Error::UnsupportedPlatform)
+        }
+    }
+
+    /// 模板打印（三层架构：前端传数据+模板，Rust 原子调度，引擎负责渲染）
+    pub async fn print_template(
+        &self,
+        options: PrintTemplateOptions,
+    ) -> crate::Result<String> {
+        #[cfg(target_os = "windows")]
+        {
+            crate::print_engine::print_template(&self.app, options).await
         }
         #[cfg(not(target_os = "windows"))]
         {
