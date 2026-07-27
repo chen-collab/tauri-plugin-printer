@@ -427,6 +427,18 @@
           "markdownDescription": "Denies the print_pdf command without any pre-configured scope."
         },
         {
+          "description": "Enables the print_template command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-print-template",
+          "markdownDescription": "Enables the print_template command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the print_template command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-print-template",
+          "markdownDescription": "Denies the print_template command without any pre-configured scope."
+        },
+        {
           "description": "Enables the remove_job command without any pre-configured scope.",
           "type": "string",
           "const": "allow-remove-job",
@@ -475,10 +487,10 @@
           "markdownDescription": "Denies the resume_job command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-create-temp-file`\n- `allow-remove-temp-file`\n- `allow-get-printers`\n- `allow-get-printers-by-name`\n- `allow-print-html`\n- `allow-print-pdf`\n- `allow-get-jobs`\n- `allow-get-jobs-by-id`\n- `allow-resume-job`\n- `allow-restart-job`\n- `allow-pause-job`\n- `allow-remove-job`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-create-temp-file`\n- `allow-remove-temp-file`\n- `allow-get-printers`\n- `allow-get-printers-by-name`\n- `allow-print-html`\n- `allow-print-pdf`\n- `allow-print-template`\n- `allow-get-jobs`\n- `allow-get-jobs-by-id`\n- `allow-resume-job`\n- `allow-restart-job`\n- `allow-pause-job`\n- `allow-remove-job`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-create-temp-file`\n- `allow-remove-temp-file`\n- `allow-get-printers`\n- `allow-get-printers-by-name`\n- `allow-print-html`\n- `allow-print-pdf`\n- `allow-get-jobs`\n- `allow-get-jobs-by-id`\n- `allow-resume-job`\n- `allow-restart-job`\n- `allow-pause-job`\n- `allow-remove-job`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-ping`\n- `allow-create-temp-file`\n- `allow-remove-temp-file`\n- `allow-get-printers`\n- `allow-get-printers-by-name`\n- `allow-print-html`\n- `allow-print-pdf`\n- `allow-print-template`\n- `allow-get-jobs`\n- `allow-get-jobs-by-id`\n- `allow-resume-job`\n- `allow-restart-job`\n- `allow-pause-job`\n- `allow-remove-job`"
         }
       ]
     }

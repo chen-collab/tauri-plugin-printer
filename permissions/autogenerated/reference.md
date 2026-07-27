@@ -11,6 +11,7 @@ Default permissions for the plugin
 - `allow-get-printers-by-name`
 - `allow-print-html`
 - `allow-print-pdf`
+- `allow-print-template`
 - `allow-get-jobs`
 - `allow-get-jobs-by-id`
 - `allow-resume-job`
@@ -309,6 +310,32 @@ Enables the print_pdf command without any pre-configured scope.
 <td>
 
 Denies the print_pdf command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`printer-v2:allow-print-template`
+
+</td>
+<td>
+
+Enables the print_template command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`printer-v2:deny-print-template`
+
+</td>
+<td>
+
+Denies the print_template command without any pre-configured scope.
 
 </td>
 </tr>

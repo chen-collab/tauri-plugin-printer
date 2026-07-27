@@ -8,6 +8,7 @@ import printData from "./print-data.js";
 import ReceiptDesigner from "./designers/ReceiptDesigner.vue";
 import MedicalRecordDesigner from "./designers/MedicalRecordDesigner.vue";
 import PrescriptionDesigner from "./designers/PrescriptionDesigner.vue";
+import DispensingReceiptDesigner from "./designers/DispensingReceiptDesigner.vue";
 
 // 排版设计子 tab
 const designerTab = ref("general"); // general | receipt | record | rx
@@ -237,6 +238,7 @@ onMounted(() => {
       <button :class="['sub-tab-btn', { active: designerTab === 'receipt' }]" @click="designerTab = 'receipt'">结算小票</button>
       <button :class="['sub-tab-btn', { active: designerTab === 'record' }]" @click="designerTab = 'record'">病历</button>
       <button :class="['sub-tab-btn', { active: designerTab === 'rx' }]" @click="designerTab = 'rx'">处方</button>
+      <button :class="['sub-tab-btn', { active: designerTab === 'dispense' }]" @click="designerTab = 'dispense'">取药小票</button>
     </div>
 
     <!-- 通用设计 -->
@@ -429,6 +431,9 @@ onMounted(() => {
 
     <!-- 处方 -->
     <PrescriptionDesigner v-if="designerTab === 'rx'" />
+
+    <!-- 取药小票 -->
+    <DispensingReceiptDesigner v-if="designerTab === 'dispense'" />
   </div>
 </template>
 <style scoped>

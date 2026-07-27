@@ -114,25 +114,6 @@ async fn print_template<R: Runtime>(
     app.printer().print_template(options).await
 }
 
-/// 渲染完成回调（内部 command，由 print-render.html 引擎页面调用）
-#[tauri::command(rename_all = "camelCase")]
-async fn print_render_done<R: Runtime>(
-    window: tauri::WebviewWindow<R>,
-    app: tauri::AppHandle<R>,
-    html: String,
-    content_height_px: f64,
-) -> Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        crate::print_engine::print_render_done(window, app, html, content_height_px).await
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (window, app, html, content_height_px);
-        Err(crate::Error::UnsupportedPlatform)
-    }
-}
-
 /// 获取打印任务列表
 #[tauri::command(rename_all = "camelCase")]
 async fn get_jobs<R: Runtime>(
@@ -230,7 +211,6 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             get_printers_by_name,
             print_pdf,
             print_template,
-            print_render_done,
             get_jobs,
             get_jobs_by_id,
             resume_job,
@@ -245,11 +225,6 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             let printer = mobile::init(app, api)?;
 
             app.manage(printer);
-
-            // 注册渲染完成回调注册表（用于模板打印引擎的回调路由）
-            #[cfg(target_os = "windows")]
-            app.manage(crate::print_engine::RenderRegistry::new());
-
             Ok(())
         })
         .build()

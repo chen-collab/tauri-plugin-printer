@@ -30,11 +30,11 @@
     @page { margin: 0; }
   </style>
 
-  <!-- hiprint 依赖（按顺序加载） -->
-  <script src="./jquery.min.js"></script>
-  <script src="./jsbarcode.min.js"></script>
-  <script src="./bwip-js.js"></script>
-  <script src="./vue-plugin-hiprint.js"></script>
+  <!--
+    注意：外部 JS 库（jquery/jsbarcode/bwip-js/vue-plugin-hiprint）不通过 <script src> 加载，
+    因为 file:// 页面的 <script src> 可能被 WebView2 安全策略阻止。
+    改由 Rust 端在导航完成后用 ExecuteScript 依次注入库文件内容。
+  -->
 </head>
 <body>
   <!-- 渲染容器（离屏，只用于布局计算） -->
@@ -44,17 +44,23 @@
     (function () {
       'use strict';
 
-      // 获取 hiprint 全局对象
-      var hiprint = window.hiprint || (window['vue-plugin-hiprint'] && window['vue-plugin-hiprint'].hiprint);
-      var defaultElementTypeProvider = window['vue-plugin-hiprint']
-        ? window['vue-plugin-hiprint'].defaultElementTypeProvider
-        : null;
+      // 获取 hiprint 全局对象（库可能由 Rust 端注入，必须动态读取）
+      function getHiprint() {
+        return window.hiprint || (window['vue-plugin-hiprint'] && window['vue-plugin-hiprint'].hiprint);
+      }
+
+      function getDefaultElementTypeProvider() {
+        var vpo = window['vue-plugin-hiprint'];
+        return vpo ? vpo.defaultElementTypeProvider : null;
+      }
 
       // hiprint 只初始化一次
       var inited = false;
       function ensureInit() {
         if (inited) return;
+        var hiprint = getHiprint();
         if (!hiprint) throw new Error('hiprint not loaded');
+        var defaultElementTypeProvider = getDefaultElementTypeProvider();
         if (defaultElementTypeProvider) {
           hiprint.init({ providers: [new defaultElementTypeProvider()] });
         }
@@ -171,6 +177,11 @@
        */
       window.renderAndCalculate = function (params) {
         return new Promise(function (resolve, reject) {
+          // 超时保护：30 秒后自动 reject
+          var timeoutId = setTimeout(function () {
+            reject(new Error('渲染超时（30s）：可能是图片加载卡住或 hiprint 内部错误'));
+          }, 30000);
+
           try {
             ensureInit();
 
@@ -178,20 +189,32 @@
             try {
               templateObj = JSON.parse(params.templateJson);
             } catch (e) {
+              clearTimeout(timeoutId);
               reject(new Error('模板 JSON 解析失败: ' + e.message));
               return;
+            }
+
+            // 热敏小票为连续纸：强制不分页模式，由内容撑开高度。
+            // 避免 hiprint 按面板固定高度分页导致「第二页空白 / 一行一页」。
+            if (templateObj && Array.isArray(templateObj.panels)) {
+              templateObj.panels.forEach(function (p) {
+                p.panelPageRule = 'none';      // 不分页：热敏连续纸由内容撑开高度
+                p.paperNumberDisabled = true;  // 禁用页码（避免 paperNumberTop 被甩到远页产生多页空白）
+              });
             }
 
             var dataObj;
             try {
               dataObj = JSON.parse(params.dataJson);
             } catch (e) {
+              clearTimeout(timeoutId);
               reject(new Error('数据 JSON 解析失败: ' + e.message));
               return;
             }
 
             var paperWidthMm = params.paperWidthMm;
             if (!paperWidthMm || paperWidthMm <= 0) {
+              clearTimeout(timeoutId);
               reject(new Error('纸张宽度必须大于 0'));
               return;
             }
@@ -214,6 +237,7 @@
             // 渲染到离屏容器（getHtml 方式更干净）
             var htmlResult = tpl.getHtml(dataObj);
             if (!htmlResult || !htmlResult.length) {
+              clearTimeout(timeoutId);
               reject(new Error('模板渲染失败：无内容'));
               return;
             }
@@ -227,6 +251,7 @@
               // 所有图片加载完成后，转 base64
               return convertImagesToBase64(container);
             }).then(function () {
+              clearTimeout(timeoutId);
               // 计算内容像素高度
               var contentHeightPx = container.scrollHeight;
 
@@ -242,10 +267,12 @@
                 contentHeightPx: contentHeightPx,
               });
             }).catch(function (err) {
+              clearTimeout(timeoutId);
               reject(err);
             });
 
           } catch (err) {
+            clearTimeout(timeoutId);
             reject(err);
           }
         });

@@ -6,6 +6,7 @@ const COMMANDS: &[&str] = &[
     "get_printers_by_name",
     "print_html",
     "print_pdf",
+    "print_template",
     "get_jobs",
     "get_jobs_by_id",
     "resume_job",

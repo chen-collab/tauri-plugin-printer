@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-printer-v2"
-version = "0.5.1"
+version = "0.6.0"
 authors = [ "chen-collab" ]
 description = "Tauri plugin for printing"
 edition = "2021"

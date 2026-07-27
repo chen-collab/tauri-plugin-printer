@@ -1,18 +1,16 @@
-//! 模板打印引擎（三层架构：前端指挥官 → Rust 调度中心 → 隐藏 WebView 渲染引擎）
+//! 模板打印引擎（三层架构：前端指挥官 -> Rust 调度中心 -> 隐藏 WebView 渲染引擎）
 //!
 //! 架构：
 //! - 前端：只传 { 模板 JSON, 数据 JSON, 纸张参数, 打印机配置 }
-//! - Rust：创建隐藏窗口 → 加载 print-render.html → 注入模板数据 → 等待渲染完成 → 调 WebView2 Print → 销毁窗口
-//! - 引擎：纯静态 HTML，加载 hiprint 库，提供 renderAndCalculate() 全局方法
+//! - Rust：创建隐藏窗口 -> 加载 print-render.html -> ExecuteScript 触发渲染 -> 轮询结果 -> 写入页面 -> 打印 -> 销毁
+//! - 引擎：纯静态 HTML，加载 hiprint 库，提供 renderAndCalculate() 全局方法（返回 Promise）
 //!
-//! 渲染完成回调：
-//! 引擎页面渲染完成后调用 print_render_done command（带渲染好的完整 HTML + 内容像素高度），
-//! Rust 端通过全局注册表 HashMap<label, oneshot::Sender> 路由回对应打印任务。
+//! 渲染完成通知机制：
+//! ExecuteScript 不等待 Promise resolve（webview2-com 0.38 限制），
+//! 因此用「触发渲染 + 轮询检查全局变量」模式。
+//! 轮询 JS 返回结构化对象（含诊断信息），避免 JSON 双重转义解析问题。
 
-use std::collections::HashMap;
-use std::sync::Mutex;
-
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::declare::PrintTemplateOptions;
 use crate::print_service::{
@@ -21,42 +19,51 @@ use crate::print_service::{
 use crate::webview2_print::PrintSettingsData;
 use crate::Error;
 
-/// 渲染完成结果（从 JS 引擎传回）
+/// 渲染完成结果（从 JS 引擎读取）
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderResult {
-    /// 渲染好的完整 HTML（含 body 内容，图片已转 base64）
     pub html: String,
-    /// 内容像素高度（px）
     pub content_height_px: f64,
 }
 
-/// 渲染完成回调 Sender 注册表
-/// key = 窗口 label，value = oneshot sender
-pub struct RenderRegistry {
-    inner: Mutex<HashMap<String, tokio::sync::oneshot::Sender<RenderResult>>>,
-}
-
-impl RenderRegistry {
-    pub fn new() -> Self {
-        Self {
-            inner: Mutex::new(HashMap::new()),
-        }
-    }
-
-    pub fn register(&self, label: String, tx: tokio::sync::oneshot::Sender<RenderResult>) {
-        self.inner.lock().unwrap().insert(label, tx);
-    }
-
-    pub fn take(&self, label: &str) -> Option<tokio::sync::oneshot::Sender<RenderResult>> {
-        self.inner.lock().unwrap().remove(label)
-    }
+/// 轮询返回的结构化状态
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PollStatus {
+    /// "ok" | "error" | "waiting"
+    status: String,
+    #[serde(default)]
+    html: String,
+    #[serde(default)]
+    content_height_px: f64,
+    #[serde(default)]
+    message: String,
+    /// 诊断信息（waiting 状态时返回）
+    #[serde(default)]
+    engine_ready: bool,
+    #[serde(default)]
+    has_render_fn: bool,
+    #[serde(default)]
+    has_jquery: bool,
+    #[serde(default)]
+    has_vue_plugin_obj: bool,
+    #[serde(default)]
+    vue_plugin_keys: String,
+    #[serde(default)]
+    has_hiprint: bool,
+    #[serde(default)]
+    has_js_barcode: bool,
+    #[serde(default)]
+    has_bwipjs: bool,
 }
 
 /// 渲染超时（毫秒）
-const RENDER_TIMEOUT_MS: u64 = 15_000;
+const RENDER_TIMEOUT_MS: u64 = 30_000;
+/// 轮询间隔（毫秒）
+const POLL_INTERVAL_MS: u64 = 100;
 
-/// 模板打印（原子操作：创建窗口 → 渲染 → 算高 → 打印 → 销毁）
+/// 模板打印（原子操作：创建窗口 -> 加载引擎 -> 渲染 -> 写入页面 -> 打印 -> 销毁）
 pub async fn print_template<R: Runtime>(
     app: &AppHandle<R>,
     options: PrintTemplateOptions,
@@ -75,55 +82,44 @@ pub async fn print_template<R: Runtime>(
         )));
     }
 
-    // 2. 解析引擎 HTML 路径（从资源目录加载）
+    // 2. 解析引擎 HTML 路径 + 库目录
     let engine_url = resolve_engine_url(app)?;
+    let engine_dir = engine_url
+        .strip_prefix("file:///")
+        .map(|p| std::path::PathBuf::from(p.replace('/', "\\")).parent().map(|p| p.to_path_buf()))
+        .flatten()
+        .ok_or_else(|| Error::RenderEngine("无法解析引擎目录".to_string()))?;
 
     // 3. 创建隐藏窗口
     let label = unique_window_label();
     let webview = create_hidden_window(app, &label)?;
 
-    // 4. 注册渲染完成回调
-    let (render_tx, render_rx) = tokio::sync::oneshot::channel::<RenderResult>();
-    {
-        let registry = app.state::<RenderRegistry>();
-        registry.register(label.clone(), render_tx);
-    }
+    // 4. 导航到引擎页面
+    wait_for_navigation(&webview, &engine_url, 10_000).await?;
 
-    // 5. 导航到引擎页面
-    let nav_timeout = 5_000u64;
-    wait_for_navigation(&webview, &engine_url, nav_timeout).await?;
+    // 4.5 注入 JS 库（file:// 页面的 <script src> 被 WebView2 阻止，改用 ExecuteScript 注入）
+    inject_js_libs(&webview, &engine_dir).await?;
 
-    // 6. 注入模板 + 数据 + 纸张参数，触发渲染
+    // 5. 触发渲染（ExecuteScript 执行 IIFE，不等 Promise）
+    let trigger_js = build_trigger_js(&options);
+    eval_script_async(&webview, &trigger_js, 5_000).await?;
+
+    // 6. 轮询等待渲染完成
     let render_timeout = options.render_timeout_ms.unwrap_or(RENDER_TIMEOUT_MS);
-    let js_code = build_render_invoke_js(&options);
+    let render_result = poll_render_result(&webview, render_timeout).await?;
 
-    // 用 webview.eval() 执行渲染 JS（返回值我们不关心，结果通过 print_render_done 回调通知）
-    let _ = webview
-        .eval(&js_code)
-        .map_err(|e| Error::WebView2(format!("执行渲染 JS 失败: {}", e)));
-
-    // 7. 等待渲染完成（带超时）
-    let render_result = tokio::time::timeout(
-        std::time::Duration::from_millis(render_timeout),
-        render_rx,
-    )
-    .await
-    .map_err(|_| Error::PrintTimeout(format!("渲染超时 ({}ms)", render_timeout)))?
-    .map_err(|_| Error::RenderEngine("渲染回调 channel 已关闭".to_string()))?;
-
-    // 8. 根据内容高度计算纸张高度（如果 paper_height 为 None 或 0）
+    // 7. 根据内容高度计算纸张高度
     let paper_height_mm = if options.paper_height.unwrap_or(0.0) > 0.0 {
         options.paper_height.unwrap()
     } else {
-        // 从像素转换为毫米：假设 96 DPI
-        // 1 inch = 25.4 mm, 96px = 1 inch => 1px = 25.4/96 mm
-        px_to_mm(render_result.content_height_px)
+        // 引擎按内容自适应，最小保留 10mm，避免 WebView2 SetPageHeight 因 0 拒绝
+        px_to_mm(render_result.content_height_px).max(10.0)
     };
 
-    // 9. 将渲染好的 HTML 写入当前 WebView 页面（替换文档内容）
+    // 8. 将渲染好的 HTML 写入当前 WebView 页面
     write_html_to_page(&webview, &render_result.html).await?;
 
-    // 10. 构建打印设置
+    // 9. 构建打印设置
     use crate::declare::PrintMargin;
     let orientation = options.orientation.clone().unwrap_or_else(|| {
         if options.paper_width > paper_height_mm {
@@ -146,11 +142,10 @@ pub async fn print_template<R: Runtime>(
         }),
         copies: options.copies,
         grayscale: options.grayscale,
-        // 模板打印需要打印背景（hiprint 的颜色、背景色等）
         print_backgrounds: true,
     };
 
-    // 10. 触发打印（复用 print_service 的 do_print）
+    // 10. 触发打印
     let outcome = do_print(&webview, settings_data).await?;
 
     // 11. 清理窗口
@@ -159,15 +154,193 @@ pub async fn print_template<R: Runtime>(
     Ok(format!("{}: {}", outcome.status, outcome.message))
 }
 
-/// 像素转毫米（假设 96 DPI）
+// ===== 轮询等待渲染结果 =====
+
+async fn poll_render_result<R: Runtime>(
+    webview: &tauri::WebviewWindow<R>,
+    timeout_ms: u64,
+) -> Result<RenderResult, Error> {
+    use tokio::time::{sleep, Duration, Instant};
+
+    let start = Instant::now();
+    let mut last_status: Option<PollStatus> = None;
+
+    loop {
+        if start.elapsed() > Duration::from_millis(timeout_ms) {
+            // 超时时返回最后一次轮询的诊断信息
+            let diag = match &last_status {
+                Some(s) => format!(
+                    "引擎就绪:{} jQuery:{} vuePluginObj:{} keys:{} hiprint:{} JsBarcode:{} bwipjs:{} renderFn:{}",
+                    s.engine_ready, s.has_jquery, s.has_vue_plugin_obj, s.vue_plugin_keys,
+                    s.has_hiprint, s.has_js_barcode, s.has_bwipjs, s.has_render_fn
+                ),
+                None => "无轮询数据（ExecuteScript 可能全部失败）".to_string(),
+            };
+            return Err(Error::PrintTimeout(format!(
+                "渲染超时 ({}ms)。诊断: {}",
+                timeout_ms, diag
+            )));
+        }
+
+        // 执行轮询 JS，返回结构化对象
+        let raw = eval_script_async(webview, POLL_JS, 3_000).await?;
+        let status = parse_poll_status(&raw)?;
+
+        match status.status.as_str() {
+            "ok" => {
+                return Ok(RenderResult {
+                    html: status.html,
+                    content_height_px: status.content_height_px,
+                });
+            }
+            "error" => {
+                return Err(Error::RenderEngine(format!(
+                    "渲染失败: {}",
+                    if status.message.is_empty() {
+                        "未知错误"
+                    } else {
+                        &status.message
+                    }
+                )));
+            }
+            _ => {
+                // "waiting" -- 继续轮询
+                last_status = Some(status);
+            }
+        }
+
+        sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+    }
+}
+
+/// 轮询 JS：返回结构化对象（不返回字符串，避免双重 JSON 转义）
+const POLL_JS: &str = r#"
+(function() {
+    if (window.__printError__) {
+        return { status: 'error', message: window.__printError__ };
+    }
+    if (window.__printResult__) {
+        return {
+            status: 'ok',
+            html: window.__printResult__.html,
+            contentHeightPx: window.__printResult__.contentHeightPx
+        };
+    }
+    // 诊断信息
+    var vpo = window['vue-plugin-hiprint'];
+    var hiprintObj = window.hiprint || (vpo && vpo.hiprint);
+    return {
+        status: 'waiting',
+        engineReady: !!window.__printEngineReady,
+        hasRenderFn: typeof window.renderAndCalculate === 'function',
+        hasJQuery: !!(window.jQuery || window.$),
+        hasVuePluginObj: !!vpo,
+        vuePluginKeys: vpo ? Object.keys(vpo).join(',') : '',
+        hasHiprint: !!hiprintObj,
+        hasJsBarcode: !!window.JsBarcode,
+        hasBwipjs: !!(window.bwipjs || window['bwip-js'])
+    };
+})()
+"#;
+
+/// 解析轮询返回的状态对象
+fn parse_poll_status(raw: &str) -> Result<PollStatus, Error> {
+    // ExecuteScript 返回值的 JSON 表示：
+    // - JS 返回 {status:"waiting",...} -> raw = "{\"status\":\"waiting\",...}"
+    // - JS 返回 null -> raw = "null"
+    if raw.is_empty() || raw == "null" || raw == "undefined" {
+        return Err(Error::RenderEngine(format!(
+            "轮询返回空值（引擎页面可能未加载）: {}",
+            raw
+        )));
+    }
+
+    // 直接解析
+    if let Ok(status) = serde_json::from_str::<PollStatus>(raw) {
+        return Ok(status);
+    }
+
+    Err(Error::RenderEngine(format!(
+        "轮询结果解析失败: {}",
+        raw
+    )))
+}
+
+// ===== ExecuteScript 执行 =====
+
+/// 异步执行 JS 并返回字符串结果
+async fn eval_script_async<R: Runtime>(
+    webview: &tauri::WebviewWindow<R>,
+    js: &str,
+    timeout_ms: u64,
+) -> Result<String, Error> {
+    let (tx, rx) = std::sync::mpsc::channel::<Result<String, Error>>();
+    let js = js.to_string();
+    let webview_clone = webview.clone();
+
+    use webview2_com::ExecuteScriptCompletedHandler;
+    use windows::core::HSTRING;
+
+    webview_clone
+        .with_webview(move |pw| {
+            unsafe {
+                let core = match pw.controller().CoreWebView2() {
+                    Ok(c) => c,
+                    Err(e) => {
+                        let _ = tx.send(Err(Error::WebView2(format!(
+                            "获取 CoreWebView2 失败: {}",
+                            e
+                        ))));
+                        return;
+                    }
+                };
+
+                let tx_clone = tx.clone();
+                let handler = ExecuteScriptCompletedHandler::create(Box::new(
+                    move |_sender, result| -> windows::core::Result<()> {
+                        let _ = tx_clone.send(Ok(result));
+                        Ok(())
+                    },
+                ));
+
+                if let Err(e) = core.ExecuteScript(&HSTRING::from(&js), &handler) {
+                    let _ = tx.send(Err(Error::WebView2(format!(
+                        "ExecuteScript 调用失败: {}",
+                        e
+                    ))));
+                }
+            }
+        })
+        .map_err(|e| Error::WebView2(format!("with_webview 调用失败: {}", e)))?;
+
+    let result = tokio::task::spawn_blocking(move || {
+        rx.recv_timeout(std::time::Duration::from_millis(timeout_ms))
+            .map_err(|e| match e {
+                std::sync::mpsc::RecvTimeoutError::Timeout => {
+                    Error::PrintTimeout(format!("ExecuteScript 超时 ({}ms)", timeout_ms))
+                }
+                std::sync::mpsc::RecvTimeoutError::Disconnected => {
+                    Error::WebView2("ExecuteScript channel 已断开".to_string())
+                }
+            })
+    })
+    .await
+    .map_err(|e| Error::WebView2(format!("spawn_blocking 失败: {}", e)))??;
+
+    result
+}
+
+// ===== 工具函数 =====
+
 fn px_to_mm(px: f64) -> f64 {
     px * 25.4 / 96.0
 }
 
-/// 构建渲染调用 JS 代码
-fn build_render_invoke_js(options: &PrintTemplateOptions) -> String {
-    // 将模板、数据、纸张参数传给全局 renderAndCalculate 函数
-    // 注意：JSON 字符串需要安全转义后嵌入 JS
+/// 构建触发渲染的 JS 代码
+///
+/// IIFE 调用 renderAndCalculate()，结果存入 window.__printResult__，
+/// 错误存入 window.__printError__。IIFE 本身返回 undefined（不返回 Promise）。
+fn build_trigger_js(options: &PrintTemplateOptions) -> String {
     let template_json = escape_js_string(&options.template);
     let data_json = escape_js_string(&options.data);
     let paper_width = options.paper_width;
@@ -176,26 +349,23 @@ fn build_render_invoke_js(options: &PrintTemplateOptions) -> String {
     format!(
         r#"
         (function() {{
+            window.__printResult__ = null;
+            window.__printError__ = null;
+
             if (typeof window.renderAndCalculate !== 'function') {{
-                console.error('renderAndCalculate not found');
+                window.__printError__ = 'renderAndCalculate 函数不存在（hiprint 可能未加载）';
                 return;
             }}
+
             window.renderAndCalculate({{
                 templateJson: {template},
                 dataJson: {data},
                 paperWidthMm: {width},
                 paperHeightMm: {height}
             }}).then(function(result) {{
-                window.__TAURI__.invoke('plugin:printer-v2|print_render_done', {{
-                    html: result.html,
-                    contentHeightPx: result.contentHeightPx
-                }});
+                window.__printResult__ = result;
             }}).catch(function(err) {{
-                console.error('render error:', err);
-                window.__TAURI__.invoke('plugin:printer-v2|print_render_done', {{
-                    html: '',
-                    contentHeightPx: 0
-                }});
+                window.__printError__ = (err && err.message) ? err.message : String(err);
             }});
         }})();
         "#,
@@ -206,11 +376,32 @@ fn build_render_invoke_js(options: &PrintTemplateOptions) -> String {
     )
 }
 
-/// 将字符串安全嵌入 JS 代码（用 JSON.stringify 处理转义）
 fn escape_js_string(s: &str) -> String {
-    // 直接用 serde_json 转义，保证 JSON 字符串合法
     serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
 }
+
+/// 将 HTML 内容写入当前 WebView 页面（替换整个文档）
+async fn write_html_to_page<R: Runtime>(
+    webview: &tauri::WebviewWindow<R>,
+    html: &str,
+) -> Result<(), Error> {
+    let html_json =
+        serde_json::to_string(html).map_err(|e| Error::InvalidInput(format!("HTML 转义失败: {}", e)))?;
+
+    let js_code = format!(
+        "(function() {{ document.open(); document.write({}); document.close(); }})();",
+        html_json
+    );
+
+    eval_script_async(webview, &js_code, 5_000).await?;
+
+    // document.write 同步完成，但浏览器布局需要一点时间
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    Ok(())
+}
+
+// ===== 导航等待 =====
 
 async fn wait_for_navigation<R: Runtime>(
     webview: &tauri::WebviewWindow<R>,
@@ -281,76 +472,150 @@ async fn wait_for_navigation<R: Runtime>(
     result
 }
 
-/// 解析引擎 HTML 的 file:// URL
+/// 注入 JS 库文件（绕过 file:// 的 <script src> 限制）
 ///
-/// 引擎文件位于 Tauri 资源目录的 `print-engine/print-render.html`
-fn resolve_engine_url<R: Runtime>(app: &AppHandle<R>) -> Result<String, Error> {
-    use tauri::path::BaseDirectory;
+/// 按顺序读取库文件内容，用 ExecuteScript 依次注入：
+/// jquery -> socket.io -> jsbarcode -> bwip-js -> vue-plugin-hiprint
+async fn inject_js_libs<R: Runtime>(
+    webview: &tauri::WebviewWindow<R>,
+    engine_dir: &std::path::Path,
+) -> Result<(), Error> {
+    // 1. 注入 jquery
+    inject_and_check(
+        webview,
+        engine_dir,
+        "jquery.min.js",
+        "window.jQuery || window.$",
+        10_000,
+    )
+    .await?;
 
-    let engine_path = app
-        .path()
-        .resolve("print-engine/print-render.html", BaseDirectory::Resource)
-        .map_err(|e| Error::WebView2(format!("解析引擎路径失败: {}", e)))?;
+    // 2. 注入 socket.io（hiprint 内部需要 window.io）
+    inject_and_check(
+        webview,
+        engine_dir,
+        "socket.io.min.js",
+        "typeof window.io === 'function'",
+        10_000,
+    )
+    .await?;
 
-    if !engine_path.exists() {
+    // 3. 给 vue-plugin-hiprint 的其他可选依赖设置占位符（防止内部 undefined.xxx 抛异常）
+    let stubs = r#"
+        window.JsBarcode = window.JsBarcode || {};
+        window['bwip-js'] = window['bwip-js'] || window.bwipjs || {};
+        window.jspdf = window.jspdf || {};
+        window.html2canvas = window.html2canvas || {};
+        window.canvg = window.canvg || {};
+        "done"
+    "#;
+    eval_script_async(webview, stubs, 3_000).await?;
+
+    // 4. 注入 jsbarcode（可选，收据场景可能不用，但 hiprint UMD 需要它存在）
+    let _ = inject_and_check(
+        webview,
+        engine_dir,
+        "jsbarcode.min.js",
+        "window.JsBarcode",
+        10_000,
+    )
+    .await;
+
+    // 5. 注入 bwip-js（可选，收据场景可能不用）
+    let _ = inject_and_check(
+        webview,
+        engine_dir,
+        "bwip-js.js",
+        "window.bwipjs || window['bwip-js']",
+        10_000,
+    )
+    .await;
+
+    // 6. 注入 vue-plugin-hiprint
+    inject_and_check(
+        webview,
+        engine_dir,
+        "vue-plugin-hiprint.js",
+        "window['vue-plugin-hiprint'] && window['vue-plugin-hiprint'].hiprint",
+        30_000,
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// 注入单个 JS 库并检查全局变量
+async fn inject_and_check<R: Runtime>(
+    webview: &tauri::WebviewWindow<R>,
+    engine_dir: &std::path::Path,
+    lib_name: &str,
+    check_expr: &str,
+    timeout_ms: u64,
+) -> Result<(), Error> {
+    let lib_path = engine_dir.join(lib_name);
+    let lib_content = std::fs::read_to_string(&lib_path).map_err(|e| {
+        Error::RenderEngine(format!(
+            "读取库文件失败: {} ({})",
+            lib_path.display(),
+            e
+        ))
+    })?;
+
+    eval_script_async(webview, &lib_content, timeout_ms).await?;
+
+    // 检查全局变量是否存在
+    let check_js = format!("(function() {{ return !!({}); }})()", check_expr);
+    let raw = eval_script_async(webview, &check_js, 3_000).await?;
+    let exists = raw == "true";
+
+    if !exists {
         return Err(Error::RenderEngine(format!(
-            "渲染引擎文件不存在: {}",
-            engine_path.display()
+            "注入 {} 后全局变量未找到（检查表达式: {}），返回值: {}",
+            lib_name, check_expr, raw
         )));
     }
 
-    let display = engine_path.display().to_string().replace('\\', "/");
-    Ok(format!("file:///{}", display))
+    Ok(())
 }
 
-/// 渲染完成回调（由 print-render.html 中的 JS 调用，lib.rs 中作为 tauri command 注册）
-pub async fn print_render_done<R: Runtime>(
-    window: tauri::WebviewWindow<R>,
-    app: AppHandle<R>,
-    html: String,
-    content_height_px: f64,
-) -> Result<(), Error> {
-    let label = window.label().to_string();
-    let registry: State<'_, RenderRegistry> = app.state();
+/// 解析引擎 HTML 的 file:// URL
+fn resolve_engine_url<R: Runtime>(app: &AppHandle<R>) -> Result<String, Error> {
+    use tauri::path::BaseDirectory;
 
-    if let Some(tx) = registry.take(&label) {
-        let result = RenderResult {
-            html,
-            content_height_px,
-        };
-        let _ = tx.send(result);
-    } else {
-        // 可能是超时后才到的回调，忽略
+    let candidates: Vec<std::path::PathBuf> = vec![
+        app.path()
+            .resolve("print-engine/print-render.html", BaseDirectory::Resource)
+            .unwrap_or_default(),
+        std::env::current_dir()
+            .unwrap_or_default()
+            .join("resources/print-engine/print-render.html"),
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_default()
+            .join("resources/print-engine/print-render.html"),
+        std::env::current_dir()
+            .unwrap_or_default()
+            .join("src-tauri/resources/print-engine/print-render.html"),
+    ];
+
+    for path in &candidates {
+        if path.exists() {
+            let display = path.display().to_string().replace('\\', "/");
+            return Ok(format!("file:///{}", display));
+        }
     }
 
-    Ok(())
-}
+    let tried = candidates
+        .iter()
+        .map(|p| format!("  - {}", p.display()))
+        .collect::<Vec<_>>()
+        .join("\n");
 
-/// 将 HTML 内容写入当前 WebView 页面（替换整个文档）
-///
-/// 通过 document.open/write/close 同步替换，完成后即可直接打印。
-async fn write_html_to_page<R: Runtime>(
-    webview: &tauri::WebviewWindow<R>,
-    html: &str,
-) -> Result<(), Error> {
-    // 用 JSON 转义确保 HTML 内容安全嵌入 JS 字符串
-    let html_json =
-        serde_json::to_string(html).map_err(|e| Error::InvalidInput(format!("HTML 转义失败: {}", e)))?;
-
-    let js_code = format!(
-        "(function() {{ document.open(); document.write({}); document.close(); }})();",
-        html_json
-    );
-
-    webview
-        .eval(&js_code)
-        .map_err(|e| Error::WebView2(format!("写入 HTML 到页面失败: {}", e)))?;
-
-    // document.write 是同步的，但浏览器解析和布局需要一点时间
-    // 给一个短暂延时确保布局完成（50ms 足够简单页面）
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-    Ok(())
+    Err(Error::RenderEngine(format!(
+        "渲染引擎文件不存在，已尝试以下路径：\n{}",
+        tried
+    )))
 }
 
 #[cfg(test)]
@@ -359,7 +624,6 @@ mod tests {
 
     #[test]
     fn test_px_to_mm() {
-        // 96px = 1 inch = 25.4mm
         assert!((px_to_mm(96.0) - 25.4).abs() < 0.01);
         assert!((px_to_mm(960.0) - 254.0).abs() < 0.01);
         assert!((px_to_mm(0.0) - 0.0).abs() < 0.01);
@@ -368,9 +632,40 @@ mod tests {
     #[test]
     fn test_escape_js_string() {
         let s = escape_js_string(r#"hello "world""#);
-        // serde_json 会生成带引号的字符串
         assert!(s.contains("\\\"world\\\""));
         assert!(s.starts_with('"'));
         assert!(s.ends_with('"'));
+    }
+
+    #[test]
+    fn test_parse_poll_status_waiting() {
+        let json = r#"{"status":"waiting","html":"","contentHeightPx":0,"message":"","engineReady":true,"hasRenderFn":true,"hasJQuery":true,"hasVuePluginObj":true,"vuePluginKeys":"hiprint,defaultElementTypeProvider","hasHiprint":true,"hasJsBarcode":true,"hasBwipjs":true}"#;
+        let status = parse_poll_status(json).unwrap();
+        assert_eq!(status.status, "waiting");
+        assert!(status.engine_ready);
+        assert!(status.has_render_fn);
+    }
+
+    #[test]
+    fn test_parse_poll_status_ok() {
+        let json = r#"{"status":"ok","html":"<div>test</div>","contentHeightPx":120.5,"message":"","engineReady":false,"hasRenderFn":false,"hasJQuery":false,"hasVuePluginObj":false,"vuePluginKeys":"","hasHiprint":false,"hasJsBarcode":false,"hasBwipjs":false}"#;
+        let status = parse_poll_status(json).unwrap();
+        assert_eq!(status.status, "ok");
+        assert_eq!(status.html, "<div>test</div>");
+        assert!((status.content_height_px - 120.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_parse_poll_status_error() {
+        let json = r#"{"status":"error","html":"","contentHeightPx":0,"message":"hiprint not loaded","engineReady":false,"hasRenderFn":false,"hasJQuery":false,"hasVuePluginObj":false,"vuePluginKeys":"","hasHiprint":false,"hasJsBarcode":false,"hasBwipjs":false}"#;
+        let status = parse_poll_status(json).unwrap();
+        assert_eq!(status.status, "error");
+        assert_eq!(status.message, "hiprint not loaded");
+    }
+
+    #[test]
+    fn test_parse_poll_status_null() {
+        assert!(parse_poll_status("null").is_err());
+        assert!(parse_poll_status("").is_err());
     }
 }
