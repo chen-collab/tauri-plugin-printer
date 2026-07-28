@@ -99,7 +99,11 @@ const buildPrintTemplate = () => {
   const tpl = JSON.parse(JSON.stringify(receiptPanel));
   const panel = tpl.panels[0];
   panel.panelPageRule = "none"; // 不分页：热敏连续纸由内容撑开高度
+  panel.paperHeader = 0;
   panel.paperFooter = 0;
+  // 面板高度先预置为足够大的值，避免离屏量取阶段 hiprint 按固定高度提前分页；
+  // 真实高度在 measureReflow 中量取后精确回填。
+  panel.height = 5000;
   // 表格 box 高度先置 0，让 hiprint 按真实数据渲染；真实高度在 measureReflow 中量算回填。
   // 这样引擎在“不分页模式”下按每个元素的真实位置自动撑高面板，不会裁剪也不会留白。
   const table = panel.printElements.find((e) => e.printElementType && e.printElementType.type === "table");
@@ -142,6 +146,15 @@ const measureReflow = (tpl, data) => {
       // 回填真实表格高度（+2pt 安全余量，避免 wrapper overflow:hidden 裁掉末行）
       const tableEl = tpl.panels[0].printElements.find((e) => e.printElementType && e.printElementType.type === "table");
       if (tableEl) tableEl.options.height = Math.round(realTableHpt) + 2;
+
+      // 回填面板总高度（mm）：最后一个页脚元素底部 + 安全余量
+      const lastFooter = footerEls[footerEls.length - 1];
+      if (lastFooter && lastFooter.options) {
+        const lastFooterBottomPt = lastFooter.options.top + (lastFooter.options.height || 12);
+        // pt -> mm（96 DPI 下：1 inch = 72pt = 25.4mm，故 mm = pt * 25.4 / 72）
+        const totalHeightMm = Math.ceil(lastFooterBottomPt * 25.4 / 72) + 2;
+        tpl.panels[0].height = totalHeightMm;
+      }
     }
     document.body.removeChild(holder);
   } catch (e) {

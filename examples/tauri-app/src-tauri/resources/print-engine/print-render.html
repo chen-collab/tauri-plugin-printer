@@ -291,6 +291,10 @@
         if (contentHeightMm < 10) contentHeightMm = 10;
         var heightMm = Math.ceil(contentHeightMm * 10) / 10;
 
+        // hiprint 必需样式（表格边框/内边距/表头背景、线框/矩形椭圆描边、字体、word-break）。
+        // 由 Rust 引擎注入到 window.__hiprintCss__，否则打印件与预览不一致。
+        var hiprintCss = window.__hiprintCss__ || '';
+
         return '<!DOCTYPE html>\n' +
           '<html lang="zh-CN">\n' +
           '<head>\n' +
@@ -299,6 +303,7 @@
           '  * { box-sizing: border-box; margin: 0; padding: 0; }\n' +
           '  body { font-family: "Microsoft YaHei", "SimHei", sans-serif; }\n' +
           '  @page { size: ' + paperWidthMm + 'mm ' + heightMm + 'mm; margin: 0; }\n' +
+          hiprintCss + '\n' +
           '</style>\n' +
           '</head>\n' +
           '<body>' + bodyHtml + '</body>\n' +

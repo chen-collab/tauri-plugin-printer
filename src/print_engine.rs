@@ -541,6 +541,38 @@ async fn inject_js_libs<R: Runtime>(
     )
     .await?;
 
+    // 7. 注入 hiprint 样式表（离屏量高 + 最终打印文档均依赖）。
+    //    hiprint 的表格边框/内边距/表头背景、线框/矩形椭圆描边、SimSun 字体、
+    //    word-break 等行为完全由 CSS 定义，不注入会导致渲染结果与预览不一致。
+    //    本引擎以 file:// 加载且无 HTTP 服务，改用内联 <style> 注入（等价官方 styleHandler）。
+    let css_path = engine_dir.join("print-lock.css");
+    let css = std::fs::read_to_string(&css_path).map_err(|e| {
+        Error::RenderEngine(format!(
+            "读取样式文件失败: {} ({})",
+            css_path.display(),
+            e
+        ))
+    })?;
+    let css_json = serde_json::to_string(&css).unwrap_or_else(|_| "\"\"".to_string());
+    let inject_css = format!(
+        "(function(){{ \
+            var s=document.createElement('style'); \
+            s.setAttribute('data-hiprint-css','1'); \
+            s.textContent={css}; \
+            document.head.appendChild(s); \
+            window.__hiprintCss__={css}; \
+            return 'ok'; \
+        }})()",
+        css = css_json
+    );
+    let raw = eval_script_async(webview, &inject_css, 5_000).await?;
+    if raw.trim().trim_matches('"') != "ok" {
+        return Err(Error::RenderEngine(format!(
+            "注入 hiprint CSS 失败，返回值: {}",
+            raw
+        )));
+    }
+
     Ok(())
 }
 
